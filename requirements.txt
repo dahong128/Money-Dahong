@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlmodel
+aiosqlite
+ccxt
+pandas
+pandas-ta
+jinja2
+python-multipart
+python-dotenv
+greenlet

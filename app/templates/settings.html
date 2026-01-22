@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-8">
+    <div class="flex items-center justify-between border-b border-border pb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-white tracking-tight" v-text="t('settings.title')"></h1>
+            <p class="text-gray-400 mt-1" v-text="t('settings.subtitle')"></p>
+        </div>
+        <div class="hidden sm:block">
+            <div class="px-4 py-2 rounded-lg bg-panel border border-border text-xs text-gray-400 font-mono">
+                <span v-text="t('settings.version')"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid gap-8 md:grid-cols-12">
+        <div class="md:col-span-4 space-y-1">
+            <h3 class="text-lg font-medium text-white" v-text="t('settings.environment')"></h3>
+            <p class="text-sm text-gray-500" v-text="t('settings.environmentDesc')"></p>
+        </div>
+        <div class="md:col-span-8 space-y-4">
+            <div class="rounded-xl border border-border bg-panel/50 backdrop-blur-sm p-6 space-y-6">
+                <div class="flex items-center justify-between group">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium text-gray-200" v-text="t('settings.sandboxMode')"></span>
+                            <span v-if="sandboxMode" class="px-1.5 py-0.5 rounded text-[10px] bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 uppercase tracking-wide" v-text="t('settings.testnet')"></span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1 group-hover:text-gray-400 transition-colors" v-text="t('settings.sandboxDesc')"></p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input v-model="sandboxMode" type="checkbox" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
+                    </label>
+                </div>
+                
+                <div class="h-px bg-border"></div>
+
+                <div class="flex items-center justify-between group">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium text-gray-200" v-text="t('settings.liveTrading')"></span>
+                            <span v-if="tradingEnabled" class="px-1.5 py-0.5 rounded text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 uppercase tracking-wide" v-text="t('settings.riskOn')"></span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1 group-hover:text-gray-400 transition-colors" v-text="t('settings.liveTradingDesc')"></p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input v-model="tradingEnabled" type="checkbox" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
+                    </label>
+                </div>
+
+                <div class="h-px bg-border"></div>
+
+                <div class="rounded-lg border border-border bg-surface/50 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 rounded-lg bg-surface border border-white/5 text-gray-400">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11.5 14.5 9.5 12.5 7.5 14.5 4.5 11.5a2 2 0 010-2.828l.793-.793-2.828-2.828.793-.793 1.414 1.414 1.414-1.414 1.414 1.414 2.828-2.828a2 2 0 012.828 0l2.828 2.828z"></path></svg>
+                        </div>
+                        <span class="text-sm font-medium text-gray-200" v-text="t('settings.apiStatusTitle')"></span>
+                    </div>
+                    <div class="flex items-center gap-6">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs font-medium text-gray-500 uppercase tracking-wider" v-text="t('settings.apiStatusLive')"></span>
+                            <div class="flex items-center gap-2">
+                                <div :class="(hasLiveApiKey && hasLiveApiSecret) ? 'bg-accent shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.4)]'" class="w-1.5 h-1.5 rounded-full transition-colors duration-300"></div>
+                                <span v-if="hasLiveApiKey && hasLiveApiSecret" class="text-xs font-mono text-accent" v-text="t('settings.apiStatusConfigured')"></span>
+                                <span v-else class="text-xs font-mono text-danger" v-text="t('settings.apiStatusMissing')"></span>
+                            </div>
+                        </div>
+                        <div class="w-px h-4 bg-border hidden sm:block"></div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs font-medium text-gray-500 uppercase tracking-wider" v-text="t('settings.apiStatusSandbox')"></span>
+                            <div class="flex items-center gap-2">
+                                <div :class="(hasSandboxApiKey && hasSandboxApiSecret) ? 'bg-accent shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.4)]'" class="w-1.5 h-1.5 rounded-full transition-colors duration-300"></div>
+                                <span v-if="hasSandboxApiKey && hasSandboxApiSecret" class="text-xs font-mono text-accent" v-text="t('settings.apiStatusConfigured')"></span>
+                                <span v-else class="text-xs font-mono text-danger" v-text="t('settings.apiStatusMissing')"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="hidden md:block h-px bg-border"></div>
+
+    <div class="grid gap-8 md:grid-cols-12">
+        <div class="md:col-span-4 space-y-1">
+            <h3 class="text-lg font-medium text-white" v-text="t('settings.apiCredentialsLive')"></h3>
+            <p class="text-sm text-gray-500" v-text="t('settings.apiLiveDesc')"></p>
+        </div>
+        <div class="md:col-span-8 space-y-4">
+             <div class="rounded-xl border border-border bg-panel/50 backdrop-blur-sm p-6 space-y-5">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-medium text-gray-400 uppercase tracking-wider" v-text="t('settings.apiKeyLabelLive')"></label>
+                        <span v-if="hasLiveApiKey" class="flex items-center gap-1.5 text-xs text-accent">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            <span v-text="t('settings.apiKeyConfigured')"></span>
+                        </span>
+                    </div>
+                    <input v-model="liveApiKey" type="password" class="w-full rounded-lg bg-surface border border-border px-4 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all" :placeholder="t('settings.apiKeyPlaceholderLive')" autocomplete="off" />
+                </div>
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-medium text-gray-400 uppercase tracking-wider" v-text="t('settings.apiSecretLabelLive')"></label>
+                        <span v-if="hasLiveApiSecret" class="flex items-center gap-1.5 text-xs text-accent">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            <span v-text="t('settings.apiSecretConfigured')"></span>
+                        </span>
+                    </div>
+                    <input v-model="liveSecret" type="password" class="w-full rounded-lg bg-surface border border-border px-4 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all" :placeholder="t('settings.apiSecretPlaceholderLive')" autocomplete="off" />
+                </div>
+                <div class="pt-2">
+                    <button 
+                        @click="verifyKeys(false)" 
+                        class="px-4 py-2 rounded-lg border border-border text-gray-300 hover:text-white hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-panel focus:ring-gray-500 transition-all text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        :disabled="loading || verifying"
+                    >
+                        <svg v-if="verifying" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span v-text="verifying ? t('common.verifying') : t('common.testConnection')"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="hidden md:block h-px bg-border"></div>
+
+    <div class="grid gap-8 md:grid-cols-12">
+        <div class="md:col-span-4 space-y-1">
+            <h3 class="text-lg font-medium text-white" v-text="t('settings.apiCredentialsSandbox')"></h3>
+            <p class="text-sm text-gray-500" v-text="t('settings.apiSandboxDesc')"></p>
+        </div>
+        <div class="md:col-span-8 space-y-4">
+             <div class="rounded-xl border border-border bg-panel/50 backdrop-blur-sm p-6 space-y-5">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-medium text-gray-400 uppercase tracking-wider" v-text="t('settings.apiKeyLabelSandbox')"></label>
+                        <span v-if="hasSandboxApiKey" class="flex items-center gap-1.5 text-xs text-accent">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            <span v-text="t('settings.apiKeyConfigured')"></span>
+                        </span>
+                    </div>
+                    <input v-model="sandboxApiKey" type="password" class="w-full rounded-lg bg-surface border border-border px-4 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all" :placeholder="t('settings.apiKeyPlaceholderSandbox')" autocomplete="off" />
+                </div>
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-medium text-gray-400 uppercase tracking-wider" v-text="t('settings.apiSecretLabelSandbox')"></label>
+                        <span v-if="hasSandboxApiSecret" class="flex items-center gap-1.5 text-xs text-accent">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            <span v-text="t('settings.apiSecretConfigured')"></span>
+                        </span>
+                    </div>
+                    <input v-model="sandboxSecret" type="password" class="w-full rounded-lg bg-surface border border-border px-4 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all" :placeholder="t('settings.apiSecretPlaceholderSandbox')" autocomplete="off" />
+                </div>
+                <div class="pt-2">
+                    <button 
+                        @click="verifyKeys(true)" 
+                        class="px-4 py-2 rounded-lg border border-border text-gray-300 hover:text-white hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-panel focus:ring-gray-500 transition-all text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        :disabled="loading || verifying"
+                    >
+                        <svg v-if="verifying" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span v-text="verifying ? t('common.verifying') : t('common.testConnection')"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="hidden md:block h-px bg-border"></div>
+
+    <div class="grid gap-8 md:grid-cols-12">
+        <div class="md:col-span-4 space-y-1">
+            <h3 class="text-lg font-medium text-white" v-text="t('settings.tradingParameters')"></h3>
+            <p class="text-sm text-gray-500" v-text="t('settings.tradingParamsDesc')"></p>
+        </div>
+        <div class="md:col-span-8 space-y-4">
+             <div class="rounded-xl border border-border bg-panel/50 backdrop-blur-sm p-6 space-y-5">
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2" v-text="t('settings.allowedSymbolsLabel')"></label>
+                    <input v-model="allowedSymbolsInput" type="text" class="w-full rounded-lg bg-surface border border-border px-4 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all font-mono" :placeholder="t('settings.allowedSymbolsPlaceholder')" />
+                    <p class="text-xs text-gray-500 mt-2" v-text="t('settings.allowedSymbolsHelp')"></p>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2" v-text="t('settings.pollIntervalLabel')"></label>
+                    <input v-model.number="pollInterval" type="number" min="1" class="w-full sm:w-32 rounded-lg bg-surface border border-border px-4 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all font-mono" />
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Action Bar -->
+    <div class="sticky bottom-6 z-40">
+        <div class="rounded-xl border border-border bg-panel/90 backdrop-blur shadow-2xl p-4 flex items-center justify-between gap-4">
+             <div class="flex-1">
+                <p v-if="message" class="text-sm text-accent font-medium flex items-center gap-2 animate-fade-in">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                     <span v-text="message"></span>
+                </p>
+                <p v-if="error" class="text-sm text-danger font-medium flex items-center gap-2 animate-fade-in">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    <span v-text="error"></span>
+                </p>
+             </div>
+             <button
+                @click="saveConfig"
+                class="px-6 py-2.5 rounded-lg bg-accent text-white font-semibold text-sm hover:bg-accent-hover active:transform active:scale-95 transition-all shadow-lg shadow-accent/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-panel focus:ring-accent"
+                :disabled="loading"
+            >
+                <span v-text="loading ? t('common.saving') : t('common.saveChanges')"></span>
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    {% raw %}
+    createApp({
+        mixins: [baseMixin],
+        data() {
+            return {
+                allowedSymbolsInput: '',
+                liveApiKey: '',
+                liveSecret: '',
+                sandboxApiKey: '',
+                sandboxSecret: '',
+                hasLiveApiKey: false,
+                hasLiveApiSecret: false,
+                hasSandboxApiKey: false,
+                hasSandboxApiSecret: false,
+                sandboxMode: false,
+                tradingEnabled: false,
+                pollInterval: 3,
+                verifying: false,
+                initialLoad: false
+            }
+        },
+        methods: {
+            onStatusUpdate(data) {
+                if (!this.initialLoad) {
+                    this.hasLiveApiKey = !!data.has_live_api_key
+                    this.hasLiveApiSecret = !!data.has_live_api_secret
+                    this.hasSandboxApiKey = !!data.has_sandbox_api_key
+                    this.hasSandboxApiSecret = !!data.has_sandbox_api_secret
+                    this.sandboxMode = !!data.sandbox_mode
+                    this.tradingEnabled = !!data.trading_enabled
+                    this.pollInterval = data.poll_interval_seconds || 3
+                    this.allowedSymbolsInput = (data.allowed_symbols || []).join(', ')
+                    this.initialLoad = true
+                }
+            },
+            async saveConfig() {
+                this.loading = true
+                this.message = ''
+                this.error = ''
+                try {
+                    const payload = {
+                        binance_api_key_live: this.liveApiKey,
+                        binance_secret_live: this.liveSecret,
+                        binance_api_key_sandbox: this.sandboxApiKey,
+                        binance_secret_sandbox: this.sandboxSecret,
+                        sandbox_mode: this.sandboxMode,
+                        allowed_symbols: this.allowedSymbolsInput,
+                        poll_interval_seconds: this.pollInterval,
+                        trading_enabled: this.tradingEnabled
+                    }
+                    const res = await fetch('/api/config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    })
+                    if (!res.ok) throw new Error('Save failed')
+                    this.message = this.t('settings.configurationSaved')
+                    this.liveApiKey = ''
+                    this.liveSecret = ''
+                    this.sandboxApiKey = ''
+                    this.sandboxSecret = ''
+                    this.initialLoad = false 
+                    setTimeout(() => this.message = '', 3000)
+                } catch (err) {
+                    this.error = err.message
+                    setTimeout(() => this.error = '', 3000)
+                } finally {
+                    this.loading = false
+                }
+            },
+            async verifyKeys(forceSandboxMode = null) {
+                this.verifying = true
+                this.message = ''
+                this.error = ''
+                try {
+                    const sandboxMode = forceSandboxMode !== null ? forceSandboxMode : this.sandboxMode
+                    const payload = {
+                        binance_api_key_live: this.liveApiKey,
+                        binance_secret_live: this.liveSecret,
+                        binance_api_key_sandbox: this.sandboxApiKey,
+                        binance_secret_sandbox: this.sandboxSecret,
+                        sandbox_mode: sandboxMode,
+                    }
+                    const res = await fetch('/api/verify_keys', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    })
+                    const data = await res.json()
+                    if (!res.ok || data.ok === false) throw new Error(data.error || 'Verification failed')
+                    this.message = this.t('settings.connectionVerified')
+                    setTimeout(() => this.message = '', 3000)
+                } catch (err) {
+                    this.error = err.message
+                    setTimeout(() => this.error = '', 3000)
+                } finally {
+                    this.verifying = false
+                }
+            }
+        },
+        mounted() {
+            this.setPageTitle('nav.settings')
+        }
+    }).mount('#app')
+    {% endraw %}
+</script>
+{% endblock %}
