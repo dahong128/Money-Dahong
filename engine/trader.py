@@ -5,9 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.core.db import SessionLocal
+from app.core.logger import get_logger
 from app.core.store import data_store
 from app.models.system_config import SystemConfig
 from engine.exchange import ExchangeManager
+
+logger = get_logger("TraderBot")
 
 
 class TraderBot:
@@ -81,17 +84,17 @@ class TraderBot:
                         log_msg = f"{symbol} price: {price}" if price is not None else f"{symbol} price: None"
                         data_store["logs"].insert(0, log_msg)
                         data_store["logs"] = data_store["logs"][:20]
-                        print(f"正在监控行情... {symbol} 最新价: {price}")
+                        logger.info(f"正在监控行情... {symbol} 最新价: {price}")
                     else:
                         self.last_status = "Stopped"
                         data_store["status"] = "Stopped"
-                        print("机器人休眠中...")
+                        logger.info("机器人休眠中...")
             except Exception as exc:
                 self.last_status = "Error"
                 data_store["status"] = "Error"
                 data_store["logs"].insert(0, f"Error: {exc}")
                 data_store["logs"] = data_store["logs"][:20]
-                print(f"[TraderBot] Loop error: {exc}")
+                logger.error(f"Loop error: {exc}")
 
             sleep_for = data_store.get("poll_interval_seconds", 3) or 3
             await asyncio.sleep(max(1, int(sleep_for)))

@@ -10,7 +10,10 @@ from starlette.requests import Request
 
 from app.api.routes import router
 from app.core.db import init_db
+from app.core.logger import get_logger
 from engine.trader import TraderBot
+
+logger = get_logger("Main")
 
 
 trader_bot = TraderBot()
@@ -18,16 +21,21 @@ trader_bot = TraderBot()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Starting Money-Dahong...")
     await init_db()
+    logger.info("Database initialized")
     app.state.trader_bot = trader_bot
     task = asyncio.create_task(trader_bot.run_loop())
     app.state.trader_task = task
+    logger.info("Trading bot task started")
     try:
         yield
     finally:
+        logger.info("Shutting down...")
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+        logger.info("Money-Dahong stopped")
 
 
 app = FastAPI(lifespan=lifespan)
