@@ -80,7 +80,7 @@ class TraderBot:
                         
                         # Only log if price changed or first run
                         if self.last_price != price:
-                            logger.info(f"正在监控行情... {symbol} 最新价: {price}")
+                            logger.debug(f"正在监控行情... {symbol} 最新价: {price}")
                             self.last_price = price
                         
                         # Only log status change
