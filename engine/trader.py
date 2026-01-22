@@ -77,18 +77,33 @@ class TraderBot:
                     if config.is_active:
                         symbol = data_store.get("symbol", "BTC/USDT")
                         price = await exchange.fetch_price(symbol)
-                        self.last_price = price
-                        self.last_status = "Active"
+                        
+                        # Only log if price changed or first run
+                        if self.last_price != price:
+                            logger.info(f"正在监控行情... {symbol} 最新价: {price}")
+                            self.last_price = price
+                        
+                        # Only log status change
+                        if self.last_status != "Active":
+                            logger.info("Bot started monitoring")
+                            self.last_status = "Active"
+
                         data_store["price"] = float(price) if price is not None else 0.0
                         data_store["status"] = "Active"
-                        log_msg = f"{symbol} price: {price}" if price is not None else f"{symbol} price: None"
-                        data_store["logs"].insert(0, log_msg)
-                        data_store["logs"] = data_store["logs"][:20]
-                        logger.info(f"正在监控行情... {symbol} 最新价: {price}")
+                        
+                        # Add log to UI data store only if price changed significantly (optional, keeping verbose for UI)
+                        if price is not None:
+                            log_msg = f"{symbol} price: {price}"
+                            # Simple deduplication for UI logs
+                            if not data_store["logs"] or data_store["logs"][0] != log_msg:
+                                data_store["logs"].insert(0, log_msg)
+                                data_store["logs"] = data_store["logs"][:20]
                     else:
-                        self.last_status = "Stopped"
                         data_store["status"] = "Stopped"
-                        logger.info("机器人休眠中...")
+                        # Only log status change
+                        if self.last_status != "Stopped":
+                            logger.info("机器人休眠中...")
+                            self.last_status = "Stopped"
             except Exception as exc:
                 self.last_status = "Error"
                 data_store["status"] = "Error"
