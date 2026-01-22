@@ -26,8 +26,23 @@ class ColoredFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         log_color = self.LEVEL_COLORS.get(record.levelno, Colors.GREY)
-        record.levelname = f"{log_color}{record.levelname}{Colors.RESET}"
+        # Avoid double coloring if already colored
+        if Colors.RESET not in str(record.levelname):
+            record.levelname = f"{log_color}{record.levelname}{Colors.RESET}"
         return super().format(record)
+
+
+# Filter for uvicorn access logs
+class EndpointFilter(logging.Filter):
+    """
+    Filter out logs for specific endpoints (like health checks or status polling).
+    """
+    def __init__(self, path: str):
+        super().__init__()
+        self.path = path
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().find(self.path) == -1
 
 
 # Create logger

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
@@ -10,7 +11,7 @@ from starlette.requests import Request
 
 from app.api.routes import router
 from app.core.db import init_db
-from app.core.logger import get_logger
+from app.core.logger import EndpointFilter, get_logger
 from engine.trader import TraderBot
 
 logger = get_logger("Main")
@@ -21,6 +22,9 @@ trader_bot = TraderBot()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Suppress uvicorn access logs for polling endpoints
+    logging.getLogger("uvicorn.access").addFilter(EndpointFilter("/api/status"))
+
     logger.info("Starting Money-Dahong...")
     await init_db()
     logger.info("Database initialized")
