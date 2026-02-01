@@ -1,23 +1,61 @@
-# MA Cross backtest config (double moving average).
+# 双均线（MA Cross）回测配置文件
 #
-# Notes:
-# - `symbol`/`interval` default to `.env` (`SYMBOL`/`INTERVAL`) when omitted.
-# - Backtest result summary can be pushed to Telegram.
+# 这个文件用于 `money-dahong backtest`：
+# - 每次回测都会读取这里的参数（也可在命令行用 --fast/--slow 等做临时覆盖）。
+# - 回测结束后会把“摘要”推送到 Telegram（可关闭），便于你在手机上快速看结果。
+#
+# 重要说明（当前实现的回测逻辑）：
+# - 数据来源：Binance REST `/api/v3/klines`，取最近 `limit` 根 K 线。
+# - 信号：快均线上穿慢均线 => BUY；快均线下穿慢均线 => SELL（只做单向做多，现货）。
+# - 撮合：用每根 K 线的 `close` 价在该根 K 线收盘时成交（bar close 模式）。
+# - 仓位：每次 BUY 用固定名义金额（USDT）买入；SELL 时全仓卖出。
+# - 费用：BUY/SELL 都按 `fee_rate` 计入手续费（简化模型）。
+# - 回测会忽略最后一根“可能尚未收盘”的 K 线（避免用到未完成数据）。
 
 [market]
+# 交易对，例：ETHUSDT / BTCUSDT。
+# 如果你希望跟随 `.env` 里的 `SYMBOL`，可以把这一行删掉或留空。
 symbol = "ETHUSDT"
-interval = "1h"
+
+# K 线周期：
+# - 可用值参考 Binance Kline interval：`1m` `5m` `15m` `1h` `4h` `1d` 等
+# - 周期越小交易越频繁，手续费影响越大；周期越大信号更慢但更稳。
+# 如果你希望跟随 `.env` 里的 `INTERVAL`，可以把这一行删掉或留空。
+interval = "1d"
+
+# 拉取最近多少根 K 线（最大 1000）。
+# - 1000 根 1h 大约是 ~41 天；1000 根 1d 大约是 ~1000 天。
 limit = 1000
 
 [strategy]
+# 均线类型：
+# - `sma`：简单移动平均（对近期变化不敏感）
+# - `ema`：指数移动平均（对近期变化更敏感，信号更快也更容易抖动）
 ma_type = "sma" # "sma" | "ema"
+
+# 快均线周期（必须 < slow_period）。
+# - 一般可从 5~30 开始尝试（取决于 interval）。
 fast_period = 20
+
+# 慢均线周期（必须 > fast_period）。
+# - 一般可从 30~200 开始尝试（取决于 interval）。
 slow_period = 60
 
 [backtest]
+# 回测初始资金（USDT）。
 initial_cash_usdt = 1000
+
+# 每次开仓的“固定名义金额”（USDT）。
+# - 例如 25 表示每次 BUY 用 25 USDT 买入（不考虑最小下单量/步进的真实约束）。
 order_notional_usdt = 25
+
+# 手续费率（比例）。
+# - 0.001 = 0.1%（现货常见）
+# - 回测里 BUY/SELL 都会计入手续费。
 fee_rate = 0.001
 
 [telegram]
+# 是否把回测摘要推送到 Telegram。
+# - true：推送（需要 `.env` 填好 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_CHAT_ID`）
+# - false：不推送（只在终端输出 JSON）
 notify = true
