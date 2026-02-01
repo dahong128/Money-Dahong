@@ -14,3 +14,10 @@ def ema_series(values: list[Decimal], period: int) -> list[Decimal]:
         ema.append((value * k) + (ema[-1] * (Decimal(1) - k)))
     return ema
 
+
+def sma(values: list[Decimal], period: int) -> Decimal:
+    if period <= 0:
+        raise ValueError("period must be > 0")
+    if len(values) < period:
+        raise ValueError("not enough values")
+    return sum(values[-period:]) / Decimal(period)

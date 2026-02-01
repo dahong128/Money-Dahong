@@ -10,9 +10,11 @@ Quickstart:
 - `cp .env.example .env`
 - `money-dahong health`
 - `money-dahong run`
+- `money-dahong backtest --ma-type sma --fast 20 --slow 60 --limit 1000`
 
 Docker:
 - `cp .env.example .env`
 - `docker compose build` (or `docker-compose build`)
 - `docker compose --profile cli run --rm cli health` (or `docker-compose ...`)
+- `docker compose --profile cli run --rm cli backtest --ma-type sma --fast 20 --slow 60 --limit 1000`
 - `docker compose up -d bot` (or `docker-compose up -d bot`)

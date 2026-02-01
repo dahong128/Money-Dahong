@@ -161,8 +161,11 @@
    - `money-dahong alerts-test --message 'hello'`
 4) 运行（默认 dry-run，不会真实下单）：
    - `money-dahong run`
+   - 双均线版本：`money-dahong run-ma`
 5) 实盘（需要显式确认）：
    - `.env` 设置 `TRADING_MODE=live` 且 `CONFIRM_LIVE_TRADING=YES`
+6) 回测（双均线）：
+   - `money-dahong backtest --ma-type sma --fast 20 --slow 60 --limit 1000`
 
 ---
 
@@ -177,8 +180,10 @@
 3) 连通性检查（一次性运行）：
    - `docker compose --profile cli run --rm cli health`（或 `docker-compose --profile cli run --rm cli health`）
    - `docker compose --profile cli run --rm cli alerts-test --message 'hello'`（或 `docker-compose ...`）
+   - 回测（双均线）：`docker compose --profile cli run --rm cli backtest --ma-type sma --fast 20 --slow 60 --limit 1000`
 4) 启动机器人（后台常驻）：
-   - `docker compose up -d bot`（或 `docker-compose up -d bot`）
+   - 默认启动：`docker compose up -d bot`（或 `docker-compose up -d bot`）
+   - 双均线常驻：`docker compose up -d --no-deps --force-recreate bot` 并在 `docker-compose.yml` 里把 `command` 改成 `["run-ma"]`
 5) 查看日志：
    - `docker compose logs -f bot`（或 `docker-compose logs -f bot`）
 6) 停止：
