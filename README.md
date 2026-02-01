@@ -9,5 +9,9 @@ Docker:
 - edit `configs/ma_cross.toml`
 - `docker compose build` (or `docker-compose build`)
 - `docker compose --profile cli run --rm cli health` (or `docker-compose ...`)
-- `docker compose --profile cli run --rm cli backtest`
-- `docker compose up -d bot` (or `docker-compose up -d bot`)
+- Backtest (reads `configs/ma_cross.toml`): `docker compose --profile cli run --rm cli backtest`
+- Run bot (default = MA cross, reads `configs/ma_cross.toml`): `docker compose up -d bot`
+
+Live trading switch (in `.env`):
+- `TRADING_MODE=live` and `CONFIRM_LIVE_TRADING=YES`
+- Safety cap per BUY: `MAX_ORDER_NOTIONAL_USDT` (config sizing will be capped by this value)

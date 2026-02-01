@@ -5,7 +5,7 @@ services:
     env_file:
       - .env
     restart: unless-stopped
-    command: ["run_ma"]
+    command: ["run-ma"]
     volumes:
       - ./configs:/app/configs:ro
 

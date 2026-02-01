@@ -103,7 +103,7 @@
 - 可靠性：重试/超时/限频、断线重连、幂等、可恢复启动（从交易所拉状态）。
 
 ### Milestone 0：技术选型与脚手架（0.5–1 天）
-- 语言/框架：`Python 3.11+`，`asyncio`；CLI 用 `typer` 或 `argparse`（二选一）。
+- 语言/框架：`Python 3.12+`，`asyncio`；CLI 用 `typer` 或 `argparse`（二选一）。
 - 目录结构、配置体系（`.env` + 明确的 config schema）、日志规范、CI（lint + test）。
 - 基础约定：统一时区/时间戳、Decimal 精度策略、错误码/异常体系。
 
@@ -140,7 +140,7 @@
 ---
 
 ## 3. 下一步需要补齐的信息（便于直接开工）
-1) 策略选择：先用 `EMA Cross` 作为 MVP 策略可以吗？
+1) 策略选择：`EMA Cross` / `MA Cross（双均线）` 先跑哪一个作为 MVP？
 2) 下单偏好：市价 / 限价（MVP 建议先市价，配合价格偏离保护）
 3) 部署方式：本地 Mac / VPS / Docker（建议 VPS 或 Docker，便于 7x24）
 4) 资金与风险参数：初始资金、单笔最大下单金额、最大仓位、最大日亏损/最大回撤
@@ -154,18 +154,22 @@
 
 1) 配置：
    - `cp .env.example .env` 并填写 `BINANCE_API_KEY/BINANCE_API_SECRET`、`TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID`
-2) 双均线参数配置：
-   - 编辑 `configs/ma_cross.toml`（双均线的所有参数都在这里）
-2) 构建镜像：
+   - 演练/实盘开关（`.env`）：
+     - 演练（不下单）：`TRADING_MODE=dry_run`
+     - 实盘（会下单）：`TRADING_MODE=live` 且 `CONFIRM_LIVE_TRADING=YES`
+   - 安全帽（`.env`）：`MAX_ORDER_NOTIONAL_USDT`（每次 BUY 名义金额硬上限；会截断 `ma_cross.toml` 的仓位投入）
+2) 双均线参数配置（回测/实盘共用）：
+   - 编辑 `configs/ma_cross.toml`（交易对、周期、均线、复利仓位、Trailing Stop 都在这里）
+3) 构建镜像：
    - `docker compose build`（或 `docker-compose build`）
-3) 连通性检查（一次性运行）：
+4) 连通性检查（一次性运行）：
    - `docker compose --profile cli run --rm cli health`（或 `docker-compose --profile cli run --rm cli health`）
    - `docker compose --profile cli run --rm cli alerts-test --message 'hello'`（或 `docker-compose ...`）
-   - 回测（双均线，读取配置文件并推送 Telegram）：`docker compose --profile cli run --rm cli backtest`
-4) 启动机器人（后台常驻）：
-    - 默认启动：`docker compose up -d bot`（或 `docker-compose up -d bot`）
-    - 双均线常驻：`docker compose up -d --no-deps --force-recreate bot` 并在 `docker-compose.yml` 里把 `command` 改成 `["run-ma"]`
-5) 查看日志：
+   - 回测（读取 `configs/ma_cross.toml`，默认推送 Telegram）：`docker compose --profile cli run --rm cli backtest`
+5) 启动机器人（后台常驻，默认跑双均线实盘/演练）：
+   - `docker compose up -d bot`（或 `docker-compose up -d bot`）
+   - 如需切换到 EMA 策略：把 `docker-compose.yml` 的 `bot.command` 改成 `["run"]` 然后 `docker compose up -d --force-recreate bot`
+6) 查看日志：
    - `docker compose logs -f bot`（或 `docker-compose logs -f bot`）
-6) 停止：
+7) 停止：
    - `docker compose down`（或 `docker-compose down`）
