@@ -11,6 +11,7 @@ import typer
 
 from money_dahong.backtest.engine import Backtester, BacktestResult
 from money_dahong.backtest.reporting import write_backtest_report
+from money_dahong.config.ma_cross import load_ma_cross_backtest_config
 from money_dahong.engine.trader import Trader
 from money_dahong.exchange import BinanceSpotClient
 from money_dahong.exchange.binance_spot import Kline
@@ -183,18 +184,28 @@ def run_ma() -> None:
 
 @app.command()
 def backtest(
-    fast: int = typer.Option(20, help="Fast MA period."),
-    slow: int = typer.Option(60, help="Slow MA period."),
-    ma_type: str = typer.Option("sma", help="sma|ema"),
-    limit: int = typer.Option(1000, help="Number of latest klines to fetch (max 1000)."),
-    initial_cash_usdt: float = typer.Option(1000.0, help="Initial cash in USDT."),
-    order_notional_usdt: float = typer.Option(25.0, help="Order notional per BUY in USDT."),
-    fee_rate: float = typer.Option(0.001, help="Fee rate (e.g. 0.001 = 0.1%)."),
-    report_dir: Path = typer.Option(
-        Path("reports/backtest"),
-        help="Directory to write the backtest report into.",
+    config: Path = typer.Option(
+        Path("configs/ma_cross.toml"),
+        help="MA cross backtest config file (TOML).",
     ),
-    report_name: str = typer.Option("", help="Optional report name suffix."),
+    fast: int | None = typer.Option(None, help="Override: fast MA period."),
+    slow: int | None = typer.Option(None, help="Override: slow MA period."),
+    ma_type: str | None = typer.Option(None, help="Override: sma|ema"),
+    limit: int | None = typer.Option(
+        None,
+        help="Override: number of latest klines to fetch (max 1000).",
+    ),
+    initial_cash_usdt: float | None = typer.Option(None, help="Override: initial cash in USDT."),
+    order_notional_usdt: float | None = typer.Option(
+        None,
+        help="Override: order notional per BUY in USDT.",
+    ),
+    fee_rate: float | None = typer.Option(None, help="Override: fee rate (e.g. 0.001 = 0.1%)."),
+    notify_telegram: bool | None = typer.Option(
+        None,
+        "--notify-telegram/--no-notify-telegram",
+        help="Override: push summary to Telegram.",
+    ),
 ) -> None:
     """
     Backtest the MA cross strategy on latest Binance klines (REST).
@@ -202,18 +213,49 @@ def backtest(
     settings = Settings()
     configure_logging(settings.log_level)
 
-    if limit <= 0 or limit > 1000:
+    if not config.exists():
+        raise typer.BadParameter(f"config file not found: {config}")
+
+    try:
+        cfg = load_ma_cross_backtest_config(config)
+    except Exception as e:
+        raise typer.BadParameter(f"invalid config: {e}") from e
+
+    symbol = (cfg.market.symbol or settings.symbol).strip()
+    interval = (cfg.market.interval or settings.interval).strip()
+
+    effective_limit = limit if limit is not None else cfg.market.limit
+    if effective_limit <= 0 or effective_limit > 1000:
         raise typer.BadParameter("limit must be between 1 and 1000")
 
-    ma_type_norm = ma_type.strip().lower()
-    if ma_type_norm not in ("sma", "ema"):
+    effective_ma_type = (ma_type if ma_type is not None else cfg.strategy.ma_type).strip().lower()
+    if effective_ma_type not in ("sma", "ema"):
         raise typer.BadParameter("ma_type must be 'sma' or 'ema'")
+
+    effective_fast = fast if fast is not None else cfg.strategy.fast_period
+    effective_slow = slow if slow is not None else cfg.strategy.slow_period
+    if effective_fast >= effective_slow:
+        raise typer.BadParameter("fast must be < slow")
+
+    effective_initial_cash = (
+        initial_cash_usdt if initial_cash_usdt is not None else cfg.backtest.initial_cash_usdt
+    )
+    effective_order_notional = (
+        order_notional_usdt if order_notional_usdt is not None else cfg.backtest.order_notional_usdt
+    )
+    effective_fee_rate = fee_rate if fee_rate is not None else cfg.backtest.fee_rate
+    effective_notify = (
+        notify_telegram if notify_telegram is not None else cfg.report.notify_telegram
+    )
+
+    report_dir = Path(cfg.report.dir)
+    report_name = cfg.report.name
 
     strategy = MaCrossStrategy(
         MaCrossParams(
-            fast_period=fast,
-            slow_period=slow,
-            ma_type=ma_type_norm,  # type: ignore[arg-type]
+            fast_period=effective_fast,
+            slow_period=effective_slow,
+            ma_type=effective_ma_type,  # type: ignore[arg-type]
         )
     )
 
@@ -222,53 +264,74 @@ def backtest(
             api_key=settings.binance_api_key,
             api_secret=settings.binance_api_secret,
         )
+        notifier = TelegramNotifier(
+            bot_token=settings.telegram_bot_token,
+            chat_id=settings.telegram_chat_id,
+        )
         try:
-            klines = await client.klines(
-                symbol=settings.symbol,
-                interval=settings.interval,
-                limit=limit,
-            )
-        finally:
-            await client.aclose()
+            klines = await client.klines(symbol=symbol, interval=interval, limit=effective_limit)
 
-        backtester = Backtester(
-            symbol=settings.symbol,
-            interval=settings.interval,
-            strategy=strategy,
-            initial_cash_usdt=Decimal(str(initial_cash_usdt)),
-            order_notional_usdt=Decimal(str(order_notional_usdt)),
-            fee_rate=Decimal(str(fee_rate)),
-            lookback_bars=strategy.lookback_bars,
-        )
-        result = backtester.run(klines=klines, record_curve=True)
-        summary = {
-            "symbol": result.symbol,
-            "interval": result.interval,
-            "strategy_id": strategy.strategy_id,
-            "ma_type": ma_type_norm,
-            "fast": fast,
-            "slow": slow,
-            "bars": result.bars,
-            "trades": result.trades,
-            "start_equity_usdt": str(result.start_equity_usdt),
-            "end_equity_usdt": str(result.end_equity_usdt),
-            "return_pct": str(result.return_pct),
-            "max_drawdown_pct": str(result.max_drawdown_pct),
-            "fee_rate": str(fee_rate),
-            "order_notional_usdt": str(order_notional_usdt),
-        }
-        name = report_name.strip() or (
-            f"{result.symbol}_{result.interval}_{ma_type_norm}_f{fast}_s{slow}"
-        )
-        report_dir.mkdir(parents=True, exist_ok=True)
-        out_dir = write_backtest_report(
-            report_root=report_dir,
-            report_name=name,
-            summary=summary,
-            trades=backtester.trades,
-            equity_curve=backtester.equity_curve,
-        )
-        typer.echo({**summary, "report_dir": str(out_dir)})
+            backtester = Backtester(
+                symbol=symbol,
+                interval=interval,
+                strategy=strategy,
+                initial_cash_usdt=Decimal(str(effective_initial_cash)),
+                order_notional_usdt=Decimal(str(effective_order_notional)),
+                fee_rate=Decimal(str(effective_fee_rate)),
+                lookback_bars=strategy.lookback_bars,
+            )
+            result = backtester.run(klines=klines, record_curve=True)
+            summary = {
+                "symbol": result.symbol,
+                "interval": result.interval,
+                "strategy_id": strategy.strategy_id,
+                "ma_type": effective_ma_type,
+                "fast": effective_fast,
+                "slow": effective_slow,
+                "bars": result.bars,
+                "trades": result.trades,
+                "start_equity_usdt": str(result.start_equity_usdt),
+                "end_equity_usdt": str(result.end_equity_usdt),
+                "return_pct": str(result.return_pct),
+                "max_drawdown_pct": str(result.max_drawdown_pct),
+                "fee_rate": str(effective_fee_rate),
+                "order_notional_usdt": str(effective_order_notional),
+                "config": str(config),
+            }
+
+            name = report_name.strip() or (
+                f"{result.symbol}_{result.interval}_{effective_ma_type}_f{effective_fast}_s{effective_slow}"
+            )
+            report_dir.mkdir(parents=True, exist_ok=True)
+            out_dir = write_backtest_report(
+                report_root=report_dir,
+                report_name=name,
+                summary=summary,
+                trades=backtester.trades,
+                equity_curve=backtester.equity_curve,
+            )
+
+            wins = sum(1 for t in backtester.trades if t.pnl_usdt > 0)
+            win_rate = (
+                (Decimal(wins) / Decimal(len(backtester.trades))) * Decimal("100")
+                if backtester.trades
+                else Decimal("0")
+            )
+
+            telegram_text = (
+                f"回测结果（{result.symbol} {result.interval}）\n"
+                f"双均线: {effective_ma_type.upper()} fast={effective_fast} slow={effective_slow}\n"
+                f"K线: {result.bars} 交易: {result.trades} 胜率%: {str(win_rate)}\n"
+                f"收益%: {str(result.return_pct)} 最大回撤%: {str(result.max_drawdown_pct)}\n"
+                f"报告目录: {str(out_dir)}"
+            )
+            if effective_notify:
+                await notifier.send(telegram_text)
+
+            typer.echo({**summary, "win_rate_pct": str(win_rate), "report_dir": str(out_dir)})
+        finally:
+            await notifier.aclose()
+            await client.aclose()
 
     asyncio.run(_run())
 

@@ -1,0 +1,26 @@
+# MA Cross backtest config (double moving average).
+#
+# Notes:
+# - `symbol`/`interval` default to `.env` (`SYMBOL`/`INTERVAL`) when omitted.
+# - Reports are written under `report.dir` and can be pushed to Telegram.
+
+[market]
+symbol = "ETHUSDT"
+interval = "1m"
+limit = 1000
+
+[strategy]
+ma_type = "sma" # "sma" | "ema"
+fast_period = 20
+slow_period = 60
+
+[backtest]
+initial_cash_usdt = 1000
+order_notional_usdt = 25
+fee_rate = 0.001
+
+[report]
+dir = "reports/backtest"
+name = "ma_cross"
+notify_telegram = true
+
