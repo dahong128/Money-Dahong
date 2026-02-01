@@ -10,3 +10,9 @@ Quickstart:
 - `cp .env.example .env`
 - `money-dahong health`
 - `money-dahong run`
+
+Docker:
+- `cp .env.example .env`
+- `docker compose build`
+- `docker compose --profile cli run --rm cli health`
+- `docker compose up -d bot`

@@ -163,3 +163,20 @@
    - `money-dahong run`
 5) 实盘（需要显式确认）：
    - `.env` 设置 `TRADING_MODE=live` 且 `CONFIRM_LIVE_TRADING=YES`
+
+---
+
+## 5. 使用 Docker（推荐 7x24 部署）
+1) 配置：
+   - `cp .env.example .env` 并填写 `BINANCE_API_KEY/BINANCE_API_SECRET`、`TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID`
+2) 构建镜像：
+   - `docker compose build`
+3) 连通性检查（一次性运行）：
+   - `docker compose --profile cli run --rm cli health`
+   - `docker compose --profile cli run --rm cli alerts-test --message 'hello'`
+4) 启动机器人（后台常驻）：
+   - `docker compose up -d bot`
+5) 查看日志：
+   - `docker compose logs -f bot`
+6) 停止：
+   - `docker compose down`

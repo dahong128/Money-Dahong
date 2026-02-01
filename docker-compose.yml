@@ -1,0 +1,17 @@
+services:
+  bot:
+    build:
+      context: .
+    env_file:
+      - .env
+    restart: unless-stopped
+    command: ["run"]
+
+  cli:
+    build:
+      context: .
+    env_file:
+      - .env
+    entrypoint: ["money-dahong"]
+    profiles: ["cli"]
+
