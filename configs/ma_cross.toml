@@ -2,11 +2,11 @@
 #
 # Notes:
 # - `symbol`/`interval` default to `.env` (`SYMBOL`/`INTERVAL`) when omitted.
-# - Reports are written under `report.dir` and can be pushed to Telegram.
+# - Backtest result summary can be pushed to Telegram.
 
 [market]
 symbol = "ETHUSDT"
-interval = "1m"
+interval = "1h"
 limit = 1000
 
 [strategy]
@@ -19,7 +19,5 @@ initial_cash_usdt = 1000
 order_notional_usdt = 25
 fee_rate = 0.001
 
-[report]
-dir = "reports/backtest"
-name = "ma_cross"
-notify_telegram = true
+[telegram]
+notify = true

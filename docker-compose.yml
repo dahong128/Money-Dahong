@@ -7,7 +7,6 @@ services:
     restart: unless-stopped
     command: ["run"]
     volumes:
-      - ./reports:/app/reports
       - ./configs:/app/configs:ro
 
   cli:
@@ -18,5 +17,4 @@ services:
     entrypoint: ["money-dahong"]
     profiles: ["cli"]
     volumes:
-      - ./reports:/app/reports
       - ./configs:/app/configs:ro

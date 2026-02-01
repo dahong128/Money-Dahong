@@ -46,4 +46,3 @@ def test_backtest_runs_and_records_trade() -> None:
     assert result.bars == len(klines) - 1
     assert result.trades == 1
     assert bt.trades[0].pnl_usdt != Decimal("0")
-

@@ -25,17 +25,15 @@ class BacktestConfig(BaseModel):
     fee_rate: float = Field(default=0.001, ge=0)
 
 
-class ReportConfig(BaseModel):
-    dir: str = "reports/backtest"
-    name: str = "ma_cross"
-    notify_telegram: bool = True
+class TelegramConfig(BaseModel):
+    notify: bool = True
 
 
 class MaCrossBacktestConfig(BaseModel):
     market: MarketConfig = Field(default_factory=MarketConfig)
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
-    report: ReportConfig = Field(default_factory=ReportConfig)
+    telegram: TelegramConfig = Field(default_factory=TelegramConfig)
 
     def validate_logic(self) -> None:
         if self.strategy.fast_period >= self.strategy.slow_period:
@@ -47,4 +45,3 @@ def load_ma_cross_backtest_config(path: Path) -> MaCrossBacktestConfig:
     cfg = MaCrossBacktestConfig.model_validate(raw)
     cfg.validate_logic()
     return cfg
-
