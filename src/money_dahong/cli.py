@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import logging
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -33,6 +34,10 @@ def _score_result(*, result: BacktestResult, metric: str) -> Decimal:
             dd = Decimal("0.0001")
         return result.return_pct / dd
     raise ValueError(f"unknown metric: {metric}")
+
+
+def _utc_stamp() -> str:
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 @app.command()
@@ -351,11 +356,15 @@ def optimize_ma(
 
     report_root = report_dir
     report_root.mkdir(parents=True, exist_ok=True)
+    session_root = report_root / (
+        f"{_utc_stamp()}_{settings.symbol}_{settings.interval}_{ma_type_norm}"
+    )
+    session_root.mkdir(parents=True, exist_ok=False)
 
     best_score: Decimal | None = None
     best_summary: dict[str, str] | None = None
 
-    results_csv = report_root / "results.csv"
+    results_csv = session_root / "results.csv"
     with results_csv.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(
             f,
@@ -413,7 +422,7 @@ def optimize_ma(
             if report_per_run:
                 run_name = f"{settings.symbol}_{settings.interval}_{ma_type_norm}_f{fast}_s{slow}"
                 write_backtest_report(
-                    report_root=report_root / "runs",
+                    report_root=session_root / "runs",
                     report_name=run_name,
                     summary={
                         **row,
@@ -440,6 +449,7 @@ def optimize_ma(
             "ok": True,
             "metric": metric_norm,
             "best": best_summary,
+            "session_dir": str(session_root),
             "results_csv": str(results_csv),
         }
     )
