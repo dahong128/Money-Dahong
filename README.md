@@ -9,4 +9,5 @@ Docker:
 - `docker compose build` (or `docker-compose build`)
 - `docker compose --profile cli run --rm cli health` (or `docker-compose ...`)
 - `docker compose --profile cli run --rm cli backtest --ma-type sma --fast 20 --slow 60 --limit 1000`
+- `docker compose --profile cli run --rm cli optimize-ma --ma-type sma --fast-min 5 --fast-max 30 --slow-min 20 --slow-max 200 --slow-step 5 --limit 1000`
 - `docker compose up -d bot` (or `docker-compose up -d bot`)

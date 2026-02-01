@@ -6,6 +6,8 @@ services:
       - .env
     restart: unless-stopped
     command: ["run"]
+    volumes:
+      - ./reports:/app/reports
 
   cli:
     build:
@@ -14,4 +16,5 @@ services:
       - .env
     entrypoint: ["money-dahong"]
     profiles: ["cli"]
-
+    volumes:
+      - ./reports:/app/reports

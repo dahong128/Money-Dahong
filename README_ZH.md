@@ -160,6 +160,8 @@
    - `docker compose --profile cli run --rm cli health`（或 `docker-compose --profile cli run --rm cli health`）
    - `docker compose --profile cli run --rm cli alerts-test --message 'hello'`（或 `docker-compose ...`）
    - 回测（双均线）：`docker compose --profile cli run --rm cli backtest --ma-type sma --fast 20 --slow 60 --limit 1000`
+   - 参数优化（双均线，网格搜索）：`docker compose --profile cli run --rm cli optimize-ma --ma-type sma --fast-min 5 --fast-max 30 --slow-min 20 --slow-max 200 --slow-step 5 --limit 1000`
+   - 回测/优化报告会写到 `./reports/`（已通过 `docker-compose.yml` 挂载到容器内 `/app/reports`）
 4) 启动机器人（后台常驻）：
    - 默认启动：`docker compose up -d bot`（或 `docker-compose up -d bot`）
    - 双均线常驻：`docker compose up -d --no-deps --force-recreate bot` 并在 `docker-compose.yml` 里把 `command` 改成 `["run-ma"]`

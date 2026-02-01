@@ -31,6 +31,15 @@ class BacktestResult:
     max_drawdown_pct: Decimal
 
 
+@dataclass(frozen=True)
+class EquityPoint:
+    time_ms: int
+    close: Decimal
+    cash: Decimal
+    qty: Decimal
+    equity: Decimal
+
+
 def _pct(numerator: Decimal, denominator: Decimal) -> Decimal:
     if denominator == 0:
         return Decimal("0")
@@ -62,11 +71,20 @@ class Backtester:
         self._in_position = False
 
         self.trades: list[Trade] = []
+        self.equity_curve: list[EquityPoint] = []
         self._entry_time_ms = 0
         self._entry_price = Decimal("0")
         self._entry_qty = Decimal("0")
 
-    def run(self, *, klines: list[Kline]) -> BacktestResult:
+    def run(self, *, klines: list[Kline], record_curve: bool = False) -> BacktestResult:
+        # Reset state for a fresh run.
+        self._cash = self._initial_cash
+        self._qty = Decimal("0")
+        self._in_position = False
+        self._entry_time_ms = 0
+        self._entry_price = Decimal("0")
+        self._entry_qty = Decimal("0")
+
         closed = klines[:-1] if len(klines) > 1 else []
         if not closed:
             return BacktestResult(
@@ -79,6 +97,9 @@ class Backtester:
                 return_pct=Decimal("0"),
                 max_drawdown_pct=Decimal("0"),
             )
+
+        self.trades = []
+        self.equity_curve = []
 
         start_equity = self._initial_cash
         peak_equity = start_equity
@@ -100,6 +121,16 @@ class Backtester:
                 self._apply_signal(signal=signal, price=k.close, time_ms=k.close_time_ms)
 
             equity = self._cash + (self._qty * k.close)
+            if record_curve:
+                self.equity_curve.append(
+                    EquityPoint(
+                        time_ms=k.close_time_ms,
+                        close=k.close,
+                        cash=self._cash,
+                        qty=self._qty,
+                        equity=equity,
+                    )
+                )
             if equity > peak_equity:
                 peak_equity = equity
             dd = _pct(peak_equity - equity, peak_equity)

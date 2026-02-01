@@ -22,4 +22,4 @@ build/
 *.egg-info/
 
 logs/
-
+reports/
