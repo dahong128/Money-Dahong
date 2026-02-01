@@ -16,8 +16,15 @@ slow_period = 30
 
 [backtest]
 initial_cash_usdt = 1000
+position_sizing = "cash_fraction"
+cash_fraction = 0.8
 order_notional_usdt = 25
 fee_rate = 0.001
+
+[risk]
+trailing_stop_enabled = true
+trailing_start_profit_pct = 30
+trailing_drawdown_pct = 10
 """,
         encoding="utf-8",
     )
@@ -25,6 +32,8 @@ fee_rate = 0.001
     assert cfg.strategy.ma_type == "ema"
     assert cfg.strategy.fast_period == 10
     assert cfg.strategy.slow_period == 30
+    assert cfg.backtest.position_sizing == "cash_fraction"
+    assert cfg.risk.trailing_stop_enabled is True
 
 
 def test_load_ma_cross_config_rejects_invalid_periods(tmp_path: Path) -> None:

@@ -236,13 +236,17 @@ def backtest(
     effective_initial_cash = (
         initial_cash_usdt if initial_cash_usdt is not None else cfg.backtest.initial_cash_usdt
     )
-    effective_order_notional = (
-        order_notional_usdt if order_notional_usdt is not None else cfg.backtest.order_notional_usdt
-    )
     effective_fee_rate = fee_rate if fee_rate is not None else cfg.backtest.fee_rate
     effective_notify = (
         notify_telegram if notify_telegram is not None else cfg.telegram.notify
     )
+
+    position_sizing = cfg.backtest.position_sizing
+    cash_fraction = Decimal(str(cfg.backtest.cash_fraction))
+    order_notional_value = (
+        order_notional_usdt if order_notional_usdt is not None else cfg.backtest.order_notional_usdt
+    )
+    order_notional_dec = Decimal(str(order_notional_value))
 
     strategy = MaCrossStrategy(
         MaCrossParams(
@@ -269,9 +273,14 @@ def backtest(
                 interval=interval,
                 strategy=strategy,
                 initial_cash_usdt=Decimal(str(effective_initial_cash)),
-                order_notional_usdt=Decimal(str(effective_order_notional)),
+                position_sizing=position_sizing,
+                cash_fraction=cash_fraction,
+                order_notional_usdt=order_notional_dec,
                 fee_rate=Decimal(str(effective_fee_rate)),
                 lookback_bars=strategy.lookback_bars,
+                trailing_stop_enabled=cfg.risk.trailing_stop_enabled,
+                trailing_start_profit_pct=Decimal(str(cfg.risk.trailing_start_profit_pct)),
+                trailing_drawdown_pct=Decimal(str(cfg.risk.trailing_drawdown_pct)),
             )
             result = backtester.run(klines=klines)
             summary = {
@@ -288,16 +297,32 @@ def backtest(
                 "return_pct": str(result.return_pct),
                 "max_drawdown_pct": str(result.max_drawdown_pct),
                 "fee_rate": str(effective_fee_rate),
-                "order_notional_usdt": str(effective_order_notional),
+                "position_sizing": position_sizing,
+                "cash_fraction": str(cash_fraction),
+                "order_notional_usdt": str(order_notional_dec),
+                "trailing_stop_enabled": cfg.risk.trailing_stop_enabled,
+                "trailing_start_profit_pct": str(cfg.risk.trailing_start_profit_pct),
+                "trailing_drawdown_pct": str(cfg.risk.trailing_drawdown_pct),
                 "config": str(config),
             }
 
             wins = sum(1 for t in backtester.trades if t.pnl_usdt > 0)
+            trailing_exits = sum(1 for t in backtester.trades if t.exit_reason == "trailing_stop")
+            cross_exits = sum(1 for t in backtester.trades if t.exit_reason == "cross_down")
             win_rate = (
                 (Decimal(wins) / Decimal(len(backtester.trades))) * Decimal("100")
                 if backtester.trades
                 else Decimal("0")
             )
+            if backtester.trades:
+                avg_runup = sum(
+                    (t.max_runup_pct for t in backtester.trades),
+                    Decimal("0"),
+                ) / Decimal(len(backtester.trades))
+                max_runup = max((t.max_runup_pct for t in backtester.trades), default=Decimal("0"))
+            else:
+                avg_runup = Decimal("0")
+                max_runup = Decimal("0")
 
             start_ms = klines[0].close_time_ms if klines else 0
             end_ms = klines[-2].close_time_ms if len(klines) >= 2 else 0
@@ -313,23 +338,40 @@ def backtest(
             line_stats = (
                 f"K线: {result.bars} 交易: {result.trades} 胜率: {_fmt_pct(win_rate)}%"
             )
+            line_exits = f"离场: Trailing {trailing_exits} | 死叉 {cross_exits}"
+            line_runup = f"峰值浮盈: avg {_fmt_pct(avg_runup)}% max {_fmt_pct(max_runup)}%"
             line_pnl = (
                 f"收益: {_fmt_usdt(pnl_usdt)} USDT ({_fmt_pct(result.return_pct)}%) "
                 f"期末: {_fmt_usdt(result.end_equity_usdt)}"
             )
             line_risk = f"最大回撤: {_fmt_pct(result.max_drawdown_pct)}%"
-            line_cost = (
-                f"手续费: {_fmt_pct(fee_rate_pct)}% 单笔名义: "
-                f"{_fmt_usdt(Decimal(str(effective_order_notional)))} USDT"
+            line_pos = (
+                f"仓位: 复利 {_fmt_pct(cash_fraction * Decimal('100'))}% 现金"
+                if position_sizing == "cash_fraction"
+                else f"仓位: 固定名义 {_fmt_usdt(order_notional_dec)} USDT"
             )
+            line_trail = (
+                "离场保护: 关闭"
+                if not cfg.risk.trailing_stop_enabled
+                else (
+                    "离场保护: Trailing "
+                    f"start={_fmt_pct(Decimal(str(cfg.risk.trailing_start_profit_pct)))}% "
+                    f"dd={_fmt_pct(Decimal(str(cfg.risk.trailing_drawdown_pct)))}%"
+                )
+            )
+            line_cost = f"手续费: {_fmt_pct(fee_rate_pct)}%"
             telegram_text = "\n".join(
                 [
                     "回测完成",
                     header,
                     f"区间: {period}",
                     line_stats,
+                    line_exits,
+                    line_runup,
                     line_pnl,
                     line_risk,
+                    line_pos,
+                    line_trail,
                     line_cost,
                     f"配置: {str(config)}",
                 ]
@@ -337,7 +379,16 @@ def backtest(
             if effective_notify:
                 await notifier.send(telegram_text)
 
-            typer.echo({**summary, "win_rate_pct": str(win_rate)})
+            typer.echo(
+                {
+                    **summary,
+                    "win_rate_pct": str(win_rate),
+                    "trailing_exits": str(trailing_exits),
+                    "cross_exits": str(cross_exits),
+                    "avg_runup_pct": str(avg_runup),
+                    "max_runup_pct": str(max_runup),
+                }
+            )
         finally:
             await notifier.aclose()
             await client.aclose()

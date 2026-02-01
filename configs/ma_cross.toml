@@ -8,7 +8,7 @@
 # - 数据来源：Binance REST `/api/v3/klines`，取最近 `limit` 根 K 线。
 # - 信号：快均线上穿慢均线 => BUY；快均线下穿慢均线 => SELL（只做单向做多，现货）。
 # - 撮合：用每根 K 线的 `close` 价在该根 K 线收盘时成交（bar close 模式）。
-# - 仓位：每次 BUY 用固定名义金额（USDT）买入；SELL 时全仓卖出。
+# - 仓位：支持两种模式（固定名义金额 / 按现金比例投入，复利模式）；SELL 时全仓卖出。
 # - 费用：BUY/SELL 都按 `fee_rate` 计入手续费（简化模型）。
 # - 回测会忽略最后一根“可能尚未收盘”的 K 线（避免用到未完成数据）。
 
@@ -31,28 +31,50 @@ limit = 1000
 # 均线类型：
 # - `sma`：简单移动平均（对近期变化不敏感）
 # - `ema`：指数移动平均（对近期变化更敏感，信号更快也更容易抖动）
-ma_type = "sma" # "sma" | "ema"
+ma_type = "ema" # "sma" | "ema"
 
 # 快均线周期（必须 < slow_period）。
 # - 一般可从 5~30 开始尝试（取决于 interval）。
-fast_period = 20
+fast_period = 12
 
 # 慢均线周期（必须 > fast_period）。
 # - 一般可从 30~200 开始尝试（取决于 interval）。
-slow_period = 60
+slow_period = 30
 
 [backtest]
 # 回测初始资金（USDT）。
-initial_cash_usdt = 1000
+initial_cash_usdt = 100
 
-# 每次开仓的“固定名义金额”（USDT）。
-# - 例如 25 表示每次 BUY 用 25 USDT 买入（不考虑最小下单量/步进的真实约束）。
-order_notional_usdt = 25
+# 仓位模式（复利/固定两种）：
+# - `cash_fraction`：按当前现金余额的比例投入（复利模式，推荐）
+# - `fixed_notional`：每次固定投入一个 USDT 金额
+position_sizing = "cash_fraction" # "cash_fraction" | "fixed_notional"
+
+# 复利模式：每次开仓投入“当前现金余额”的比例（0~1）。
+# - 例如 0.8 表示每次用现金余额的 80% 参与开仓，剩余 20% 作为缓冲。
+cash_fraction = 0.8
+
+# 固定模式：每次开仓投入的固定名义金额（USDT）。
+# - 仅当 position_sizing = "fixed_notional" 时生效。
+order_notional_usdt = 60
 
 # 手续费率（比例）。
 # - 0.001 = 0.1%（现货常见）
 # - 回测里 BUY/SELL 都会计入手续费。
 fee_rate = 0.001
+
+[risk]
+# 是否启用“离场保护”（移动止损 / Trailing Stop）。
+# 作用：当价格从高点回撤一定幅度时提前止盈/止损，减少死叉离场造成的盈利回吐。
+trailing_stop_enabled = true
+
+# 只有当“单笔浮盈最高值”达到该阈值后，才会开始启用移动止损（单位：百分比）。
+# - 例如 30 表示单笔浮盈最高 >= 30% 后，才启动 trailing stop。
+trailing_start_profit_pct = 30
+
+# 从最高点回撤多少就强制离场（单位：百分比）。
+# - 例如 10 表示从最高点回撤 >= 10% 就 SELL。
+trailing_drawdown_pct = 10
 
 [telegram]
 # 是否把回测摘要推送到 Telegram。

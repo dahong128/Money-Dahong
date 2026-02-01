@@ -17,7 +17,8 @@ def _k(close: str, t: int) -> Kline:
     )
 
 
-def test_backtest_runs_and_records_trade() -> None:
+def test_trailing_stop_exits_before_cross_down() -> None:
+    # Use a simple SMA cross to enter, then price spikes and drops.
     strategy = MaCrossStrategy(MaCrossParams(fast_period=2, slow_period=3, ma_type="sma"))
     bt = Backtester(
         symbol="ETHUSDT",
@@ -29,26 +30,26 @@ def test_backtest_runs_and_records_trade() -> None:
         order_notional_usdt=Decimal("100"),
         fee_rate=Decimal("0"),
         lookback_bars=strategy.lookback_bars,
-        trailing_stop_enabled=False,
+        trailing_stop_enabled=True,
         trailing_start_profit_pct=Decimal("30"),
         trailing_drawdown_pct=Decimal("10"),
     )
 
-    # Add a dummy last "forming" bar; backtester ignores last bar like live runner.
+    # Sequence:
+    # - enter on cross up around 3
+    # - peak reaches 4 (+33%)
+    # - then drop to 3.5 (12.5% from peak) triggers trailing stop exit
     klines = [
         _k("1", 0),
         _k("1", 1000),
         _k("1", 2000),
         _k("1", 3000),
-        _k("3", 4000),  # BUY should trigger here
-        _k("3", 5000),
-        _k("3", 6000),
-        _k("3", 7000),
-        _k("1", 8000),  # SELL should trigger here
-        _k("1", 9000),
+        _k("3", 4000),  # BUY should trigger
+        _k("4", 5000),  # peak profit >= 30%
+        _k("3.5", 6000),  # drawdown >= 10% from peak triggers trailing stop
+        _k("3.5", 7000),
     ]
-    result = bt.run(klines=klines)
-    assert result.bars == len(klines) - 1
-    assert result.trades == 1
-    assert bt.trades[0].pnl_usdt != Decimal("0")
-    assert bt.trades[0].exit_reason == "cross_down"
+    bt.run(klines=klines)
+    assert bt.trades
+    assert bt.trades[-1].exit_reason == "trailing_stop"
+
