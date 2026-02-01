@@ -23,4 +23,3 @@ fee_rate = 0.001
 dir = "reports/backtest"
 name = "ma_cross"
 notify_telegram = true
-

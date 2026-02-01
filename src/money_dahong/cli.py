@@ -4,7 +4,7 @@ import asyncio
 import csv
 import logging
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 import typer
@@ -24,6 +24,18 @@ from money_dahong.strategies.ma_cross import MaCrossParams, MaCrossStrategy
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 logger = logging.getLogger("money_dahong")
 
+def _q(value: Decimal, pattern: str) -> Decimal:
+    return value.quantize(Decimal(pattern), rounding=ROUND_HALF_UP)
+
+
+def _fmt_pct(value: Decimal) -> str:
+    return f"{_q(value, '0.01')}"
+
+
+def _fmt_usdt(value: Decimal) -> str:
+    return f"{_q(value, '0.01')}"
+
+
 def _score_result(*, result: BacktestResult, metric: str) -> Decimal:
     if metric == "return_pct":
         return result.return_pct
@@ -39,6 +51,9 @@ def _score_result(*, result: BacktestResult, metric: str) -> Decimal:
 
 def _utc_stamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+
+def _ms_to_utc(ts_ms: int) -> str:
+    return datetime.fromtimestamp(ts_ms / 1000, tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
 @app.command()
@@ -318,12 +333,40 @@ def backtest(
                 else Decimal("0")
             )
 
-            telegram_text = (
-                f"回测结果（{result.symbol} {result.interval}）\n"
-                f"双均线: {effective_ma_type.upper()} fast={effective_fast} slow={effective_slow}\n"
-                f"K线: {result.bars} 交易: {result.trades} 胜率%: {str(win_rate)}\n"
-                f"收益%: {str(result.return_pct)} 最大回撤%: {str(result.max_drawdown_pct)}\n"
-                f"报告目录: {str(out_dir)}"
+            start_ms = klines[0].close_time_ms if klines else 0
+            end_ms = klines[-2].close_time_ms if len(klines) >= 2 else 0
+            pnl_usdt = result.end_equity_usdt - result.start_equity_usdt
+
+            fee_rate_pct = Decimal(str(effective_fee_rate)) * Decimal("100")
+
+            header = (
+                f"{result.symbol} | {result.interval} | "
+                f"{effective_ma_type.upper()}({effective_fast},{effective_slow})"
+            )
+            period = f"{_ms_to_utc(start_ms)} ~ {_ms_to_utc(end_ms)}"
+            line_stats = (
+                f"K线: {result.bars} 交易: {result.trades} 胜率: {_fmt_pct(win_rate)}%"
+            )
+            line_pnl = (
+                f"收益: {_fmt_usdt(pnl_usdt)} USDT ({_fmt_pct(result.return_pct)}%) "
+                f"期末: {_fmt_usdt(result.end_equity_usdt)}"
+            )
+            line_risk = f"最大回撤: {_fmt_pct(result.max_drawdown_pct)}%"
+            line_cost = (
+                f"手续费: {_fmt_pct(fee_rate_pct)}% 单笔名义: "
+                f"{_fmt_usdt(Decimal(str(effective_order_notional)))} USDT"
+            )
+            telegram_text = "\n".join(
+                [
+                    "回测完成",
+                    header,
+                    f"区间: {period}",
+                    line_stats,
+                    line_pnl,
+                    line_risk,
+                    line_cost,
+                    f"报告: {str(out_dir)}",
+                ]
             )
             if effective_notify:
                 await notifier.send(telegram_text)
