@@ -167,16 +167,19 @@
 ---
 
 ## 5. 使用 Docker（推荐 7x24 部署）
+> 注意：需要本机有“正在运行的 Docker Engine”。在 macOS 上，`brew install docker` 只会安装 Docker CLI，
+> 还需要安装并启动 Docker Desktop（GUI）或 Colima（轻量 VM）才能真正运行容器。
+
 1) 配置：
    - `cp .env.example .env` 并填写 `BINANCE_API_KEY/BINANCE_API_SECRET`、`TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID`
 2) 构建镜像：
-   - `docker compose build`
+   - `docker compose build`（或 `docker-compose build`）
 3) 连通性检查（一次性运行）：
-   - `docker compose --profile cli run --rm cli health`
-   - `docker compose --profile cli run --rm cli alerts-test --message 'hello'`
+   - `docker compose --profile cli run --rm cli health`（或 `docker-compose --profile cli run --rm cli health`）
+   - `docker compose --profile cli run --rm cli alerts-test --message 'hello'`（或 `docker-compose ...`）
 4) 启动机器人（后台常驻）：
-   - `docker compose up -d bot`
+   - `docker compose up -d bot`（或 `docker-compose up -d bot`）
 5) 查看日志：
-   - `docker compose logs -f bot`
+   - `docker compose logs -f bot`（或 `docker-compose logs -f bot`）
 6) 停止：
-   - `docker compose down`
+   - `docker compose down`（或 `docker-compose down`）

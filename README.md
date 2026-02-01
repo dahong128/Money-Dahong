@@ -13,6 +13,6 @@ Quickstart:
 
 Docker:
 - `cp .env.example .env`
-- `docker compose build`
-- `docker compose --profile cli run --rm cli health`
-- `docker compose up -d bot`
+- `docker compose build` (or `docker-compose build`)
+- `docker compose --profile cli run --rm cli health` (or `docker-compose ...`)
+- `docker compose up -d bot` (or `docker-compose up -d bot`)
