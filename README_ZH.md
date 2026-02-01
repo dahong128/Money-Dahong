@@ -171,5 +171,6 @@
    - 如需切换到 EMA 策略：把 `docker-compose.yml` 的 `bot.command` 改成 `["run"]` 然后 `docker compose up -d --force-recreate bot`
 6) 查看日志：
    - `docker compose logs -f bot`（或 `docker-compose logs -f bot`）
+   - 提示：如果你用的是 `interval=1d`，程序会按周期自动降低轮询频率（不会每 3 秒刷一次 Binance 请求日志）。
 7) 停止：
    - `docker compose down`（或 `docker-compose down`）

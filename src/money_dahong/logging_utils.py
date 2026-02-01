@@ -14,7 +14,7 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "msg": record.getMessage(),
         }
-        for key in ("symbol", "strategy_id", "order_id", "trace_id"):
+        for key in ("symbol", "interval", "strategy_id", "order_id", "trace_id", "qty"):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)
         if record.exc_info:
@@ -27,7 +27,9 @@ def configure_logging(level: str) -> None:
     root.handlers.clear()
     root.setLevel(level.upper())
 
+    # Hide per-request logs by default; keep them available via DEBUG if needed.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
     root.addHandler(handler)
-

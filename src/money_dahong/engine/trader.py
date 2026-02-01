@@ -78,6 +78,48 @@ def _extract_free_balance(*, account: dict[str, object], asset: str) -> Decimal:
     return Decimal("0")
 
 
+def _interval_ms(interval: str) -> int | None:
+    s = interval.strip()
+    if len(s) < 2:
+        return None
+    unit = s[-1]
+    num_s = s[:-1]
+    if not num_s.isdigit():
+        return None
+    n = int(num_s)
+    if n <= 0:
+        return None
+    if unit == "m":
+        return n * 60_000
+    if unit == "h":
+        return n * 60 * 60_000
+    if unit == "d":
+        return n * 24 * 60 * 60_000
+    if unit == "w":
+        return n * 7 * 24 * 60 * 60_000
+    # Month interval ("1M") is variable-length; avoid precise scheduling.
+    return None
+
+
+def _poll_cap_seconds(interval: str) -> float:
+    ms = _interval_ms(interval)
+    if ms is None:
+        return 30.0
+    if ms <= 60_000:
+        return 3.0
+    if ms <= 5 * 60_000:
+        return 5.0
+    if ms <= 15 * 60_000:
+        return 10.0
+    if ms <= 60 * 60_000:
+        return 30.0
+    if ms <= 4 * 60 * 60_000:
+        return 60.0
+    if ms <= 24 * 60 * 60_000:
+        return 300.0
+    return 600.0
+
+
 class Trader:
     def __init__(
         self,
@@ -138,8 +180,8 @@ class Trader:
 
         try:
             while True:
-                await self._tick(symbol=symbol, interval=interval)
-                await asyncio.sleep(3)
+                sleep_s = await self._tick(symbol=symbol, interval=interval)
+                await asyncio.sleep(sleep_s)
         except asyncio.CancelledError:
             raise
         except KeyboardInterrupt:
@@ -147,17 +189,23 @@ class Trader:
         finally:
             await self._notifier.send(f"Stopped: {symbol} {self._strategy.strategy_id}")
 
-    async def _tick(self, *, symbol: str, interval: str) -> None:
+    async def _tick(self, *, symbol: str, interval: str) -> float:
         if self._rules is None:
-            return
-        klines = await self._client.klines(symbol=symbol, interval=interval, limit=200)
+            return 3.0
+
+        lookback_bars = 200
+        if hasattr(self._strategy, "lookback_bars"):
+            lookback_bars = max(lookback_bars, int(self._strategy.lookback_bars))
+        lookback_bars = min(1000, lookback_bars)
+
+        klines = await self._client.klines(symbol=symbol, interval=interval, limit=lookback_bars)
         closed_klines = self._closed_only(klines)
         if len(closed_klines) < 3:
-            return
+            return _poll_cap_seconds(interval)
 
         last_closed = closed_klines[-1]
         if last_closed.close_time_ms == self._state.last_processed_close_time_ms:
-            return
+            return self._sleep_until_next_close_s(last_closed_close_ms=last_closed.close_time_ms)
         self._state.last_processed_close_time_ms = last_closed.close_time_ms
 
         last_price = last_closed.close
@@ -186,7 +234,9 @@ class Trader:
                 )
                 if order:
                     await self._execute(order=order, signal=trailing_signal, last_price=last_price)
-                return
+                return self._sleep_until_next_close_s(
+                    last_closed_close_ms=last_closed.close_time_ms,
+                )
 
         ctx = StrategyContext(
             symbol=symbol,
@@ -199,7 +249,7 @@ class Trader:
                 "no_signal",
                 extra={"symbol": symbol, "strategy_id": self._strategy.strategy_id},
             )
-            return
+            return self._sleep_until_next_close_s(last_closed_close_ms=last_closed.close_time_ms)
 
         if signal.side == "BUY" and (
             time.time() - self._state.last_trade_time_s < self._settings.cooldown_seconds
@@ -208,7 +258,7 @@ class Trader:
                 "signal_blocked_cooldown",
                 extra={"symbol": symbol, "strategy_id": self._strategy.strategy_id},
             )
-            return
+            return self._sleep_until_next_close_s(last_closed_close_ms=last_closed.close_time_ms)
 
         order = await self._build_order(signal=signal, last_price=last_price, rules=self._rules)
         if not order:
@@ -216,9 +266,20 @@ class Trader:
                 "signal_blocked_no_order",
                 extra={"symbol": symbol, "strategy_id": self._strategy.strategy_id},
             )
-            return
+            return self._sleep_until_next_close_s(last_closed_close_ms=last_closed.close_time_ms)
 
         await self._execute(order=order, signal=signal, last_price=last_price)
+        return self._sleep_until_next_close_s(last_closed_close_ms=last_closed.close_time_ms)
+
+    def _sleep_until_next_close_s(self, *, last_closed_close_ms: int) -> float:
+        cap = _poll_cap_seconds(self._interval)
+        ms = _interval_ms(self._interval)
+        if ms is None:
+            return cap
+        now_ms = int(time.time() * 1000)
+        next_close_ms = last_closed_close_ms + ms
+        seconds = max(3.0, (next_close_ms - now_ms) / 1000.0 + 1.0)
+        return min(cap, seconds)
 
     def _closed_only(self, klines: list[Kline]) -> list[Kline]:
         # Binance REST `/klines` includes the currently-forming candle as the last item.
