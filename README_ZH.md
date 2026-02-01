@@ -150,7 +150,7 @@
 
 ## 4. 快速开始（CLI）
 1) 安装（开发模式）：
-   - `python -m venv .venv && source .venv/bin/activate`
+   - `python3.12 -m venv .venv && source .venv/bin/activate`
    - `python -m pip install -U pip`
    - `python -m pip install -e '.[dev]'`
 2) 配置：
