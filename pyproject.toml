@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=69.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "money-dahong"
+version = "0.1.0"
+description = "Binance spot quant trading tool (CLI, engineering-first)."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "httpx>=0.27.0",
+  "pydantic>=2.7.0",
+  "pydantic-settings>=2.3.0",
+  "python-dotenv>=1.0.1",
+  "typer>=0.12.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2.0",
+  "ruff>=0.5.0",
+  "mypy>=1.10.0",
+]
+
+[project.scripts]
+money-dahong = "money_dahong.cli:app"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+  "B008",  # Typer uses Option()/Argument() in defaults by design
+  "UP045", # `X | None` requires Python 3.10+
+]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+mypy_path = ["src"]
+ignore_missing_imports = true

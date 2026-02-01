@@ -1,6 +1,6 @@
 # 币安量化交易工具：需求文档与开发计划（草案）
 
-> 已确认范围（2026-02-01）：**现货** / **Binance.com** / **CLI** / **单交易对单策略** / **工程化优先**。
+> 已确认范围（2026-02-01）：**现货** / **Binance.com** / **CLI** / **单交易对单策略** / **工程化优先** / 交易对 **ETHUSDT** / 告警 **Telegram**。
 
 ---
 
@@ -12,6 +12,8 @@
 - 交互方式：CLI（暂无 Web 面板）
 - 运行形态：单交易对 + 单策略（先跑通一个 bot 实例）
 - 目标倾向：工程化（稳定性、可观测、可维护优先）
+- 交易对：ETHUSDT
+- 告警通道：Telegram
 
 ### 1.1 背景与目标
 - 背景：将交易策略从研究到实盘自动化，降低手动操作成本，提高可观测性与可控风险。
@@ -138,8 +140,26 @@
 ---
 
 ## 3. 下一步需要补齐的信息（便于直接开工）
-1) 交易对：例如 `BTCUSDT`？是否只做一个固定交易对还是可配置但同一时刻只跑一个？
-2) 策略选择：先用 `EMA Cross` 作为 MVP 策略可以吗？
-3) 下单偏好：市价 / 限价（MVP 建议先市价，配合价格偏离保护）
-4) 部署方式：本地 Mac / VPS / Docker（建议 VPS 或 Docker，便于 7x24）
-5) 告警通道：Telegram / 邮件（先选一个）
+1) 策略选择：先用 `EMA Cross` 作为 MVP 策略可以吗？
+2) 下单偏好：市价 / 限价（MVP 建议先市价，配合价格偏离保护）
+3) 部署方式：本地 Mac / VPS / Docker（建议 VPS 或 Docker，便于 7x24）
+4) 资金与风险参数：初始资金、单笔最大下单金额、最大仓位、最大日亏损/最大回撤
+5) 运行频率：K 线周期（例如 `1m/5m/15m`）与是否需要 WebSocket（先 REST 轮询也可）
+
+---
+
+## 4. 快速开始（CLI）
+1) 安装（开发模式）：
+   - `python -m venv .venv && source .venv/bin/activate`
+   - `python -m pip install -U pip`
+   - `python -m pip install -e '.[dev]'`
+2) 配置：
+   - `cp .env.example .env`（或 `money-dahong config-init`）
+   - 填写 `.env`：`BINANCE_API_KEY/BINANCE_API_SECRET`、`TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID`
+3) 连通性：
+   - `money-dahong health`
+   - `money-dahong alerts-test --message 'hello'`
+4) 运行（默认 dry-run，不会真实下单）：
+   - `money-dahong run`
+5) 实盘（需要显式确认）：
+   - `.env` 设置 `TRADING_MODE=live` 且 `CONFIRM_LIVE_TRADING=YES`
