@@ -148,28 +148,7 @@
 
 ---
 
-## 4. 快速开始（CLI）
-1) 安装（开发模式）：
-   - `python3.12 -m venv .venv && source .venv/bin/activate`
-   - `python -m pip install -U pip`
-   - `python -m pip install -e '.[dev]'`
-2) 配置：
-   - `cp .env.example .env`（或 `money-dahong config-init`）
-   - 填写 `.env`：`BINANCE_API_KEY/BINANCE_API_SECRET`、`TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID`
-3) 连通性：
-   - `money-dahong health`
-   - `money-dahong alerts-test --message 'hello'`
-4) 运行（默认 dry-run，不会真实下单）：
-   - `money-dahong run`
-   - 双均线版本：`money-dahong run-ma`
-5) 实盘（需要显式确认）：
-   - `.env` 设置 `TRADING_MODE=live` 且 `CONFIRM_LIVE_TRADING=YES`
-6) 回测（双均线）：
-   - `money-dahong backtest --ma-type sma --fast 20 --slow 60 --limit 1000`
-
----
-
-## 5. 使用 Docker（推荐 7x24 部署）
+## 4. 使用 Docker（推荐 7x24 部署）
 > 注意：需要本机有“正在运行的 Docker Engine”。在 macOS 上，`brew install docker` 只会安装 Docker CLI，
 > 还需要安装并启动 Docker Desktop（GUI）或 Colima（轻量 VM）才能真正运行容器。
 
