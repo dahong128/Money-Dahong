@@ -120,14 +120,20 @@ class BinanceSpotClient:
         *,
         symbol: str,
         side: Side,
-        quantity: Decimal,
+        quantity: Decimal | None = None,
+        quote_order_qty: Decimal | None = None,
     ) -> dict[str, Any]:
+        if (quantity is None) == (quote_order_qty is None):
+            raise ValueError("exactly one of quantity or quote_order_qty must be provided")
         params: dict[str, Any] = {
             "symbol": symbol,
             "side": side,
             "type": "MARKET",
-            "quantity": quantity,
         }
+        if quantity is not None:
+            params["quantity"] = quantity
+        if quote_order_qty is not None:
+            params["quoteOrderQty"] = quote_order_qty
         data = await self._request("POST", "/api/v3/order", signed=True, params=params)
         return cast(dict[str, Any], data)
 

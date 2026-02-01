@@ -1,8 +1,8 @@
 # 双均线（MA Cross）回测配置文件
 #
-# 这个文件用于 `money-dahong backtest`：
-# - 每次回测都会读取这里的参数（也可在命令行用 --fast/--slow 等做临时覆盖）。
-# - 回测结束后会把“摘要”推送到 Telegram（可关闭），便于你在手机上快速看结果。
+# 这个文件用于：
+# - `money-dahong backtest`：回测读取这里的参数（也可在命令行用 --fast/--slow 等做临时覆盖）。
+# - `money-dahong run-ma`：实盘/演练同样读取这里的参数（仓位与离场保护也会生效）。
 #
 # 重要说明（当前实现的回测逻辑）：
 # - 数据来源：Binance REST `/api/v3/klines`，取最近 `limit` 根 K 线。
@@ -52,7 +52,7 @@ position_sizing = "cash_fraction" # "cash_fraction" | "fixed_notional"
 
 # 复利模式：每次开仓投入“当前现金余额”的比例（0~1）。
 # - 例如 0.8 表示每次用现金余额的 80% 参与开仓，剩余 20% 作为缓冲。
-cash_fraction = 0.8
+cash_fraction = 0.6
 
 # 固定模式：每次开仓投入的固定名义金额（USDT）。
 # - 仅当 position_sizing = "fixed_notional" 时生效。

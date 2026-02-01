@@ -17,5 +17,9 @@ class Signal:
 class OrderRequest:
     symbol: str
     side: Side
-    quantity: Decimal
+    # Binance MARKET BUY supports either `quantity` (base asset qty)
+    # or `quoteOrderQty` (quote notional).
+    # We use `quote_order_qty` for sizing by USDT notional.
+    quantity: Decimal | None = None
+    quote_order_qty: Decimal | None = None
     order_type: Literal["MARKET"] = "MARKET"

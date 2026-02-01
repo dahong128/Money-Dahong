@@ -134,7 +134,17 @@ def run() -> None:
                 slow_period=settings.ema_slow_period,
             )
         )
-        trader = Trader(settings=settings, client=client, strategy=strategy, notifier=notifier)
+        max_notional = Decimal(str(settings.max_order_notional_usdt))
+        trader = Trader(
+            settings=settings,
+            client=client,
+            strategy=strategy,
+            notifier=notifier,
+            position_sizing="fixed_notional",
+            order_notional_usdt=max_notional,
+            max_order_notional_usdt=max_notional,
+            trailing_stop_enabled=False,
+        )
         try:
             await trader.run()
         finally:
@@ -145,12 +155,28 @@ def run() -> None:
 
 
 @app.command()
-def run_ma() -> None:
+def run_ma(
+    config: Path = typer.Option(
+        Path("configs/ma_cross.toml"),
+        help="MA cross live config file (TOML).",
+    ),
+) -> None:
     """
-    Run the MA cross bot (double moving average, default SMA).
+    Run the MA cross bot (double moving average) using `configs/ma_cross.toml`.
     """
     settings = Settings()
     configure_logging(settings.log_level)
+
+    if not config.exists():
+        raise typer.BadParameter(f"config file not found: {config}")
+
+    try:
+        cfg = load_ma_cross_backtest_config(config)
+    except Exception as e:
+        raise typer.BadParameter(f"invalid config: {e}") from e
+
+    symbol = (cfg.market.symbol or settings.symbol).strip()
+    interval = (cfg.market.interval or settings.interval).strip()
 
     async def _run() -> None:
         client = BinanceSpotClient(
@@ -163,14 +189,28 @@ def run_ma() -> None:
         )
         strategy = MaCrossStrategy(
             MaCrossParams(
-                fast_period=settings.ma_fast_period,
-                slow_period=settings.ma_slow_period,
-                ma_type=settings.ma_type,
+                fast_period=cfg.strategy.fast_period,
+                slow_period=cfg.strategy.slow_period,
+                ma_type=cfg.strategy.ma_type,
             )
         )
-        trader = Trader(settings=settings, client=client, strategy=strategy, notifier=notifier)
+
+        max_notional = Decimal(str(settings.max_order_notional_usdt))
+        trader = Trader(
+            settings=settings,
+            client=client,
+            strategy=strategy,
+            notifier=notifier,
+            position_sizing=cfg.backtest.position_sizing,
+            cash_fraction=Decimal(str(cfg.backtest.cash_fraction)),
+            order_notional_usdt=Decimal(str(cfg.backtest.order_notional_usdt)),
+            max_order_notional_usdt=max_notional,
+            trailing_stop_enabled=cfg.risk.trailing_stop_enabled,
+            trailing_start_profit_pct=Decimal(str(cfg.risk.trailing_start_profit_pct)),
+            trailing_drawdown_pct=Decimal(str(cfg.risk.trailing_drawdown_pct)),
+        )
         try:
-            await trader.run()
+            await trader.run(symbol=symbol, interval=interval)
         finally:
             await notifier.aclose()
             await client.aclose()
