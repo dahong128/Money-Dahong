@@ -78,6 +78,25 @@ def _extract_free_balance(*, account: dict[str, object], asset: str) -> Decimal:
     return Decimal("0")
 
 
+def _extract_balance(*, account: dict[str, object], asset: str) -> tuple[Decimal, Decimal]:
+    balances = account.get("balances", [])
+    if not isinstance(balances, list):
+        return Decimal("0"), Decimal("0")
+    for b in balances:
+        if not isinstance(b, dict):
+            continue
+        if str(b.get("asset", "")).upper() != asset.upper():
+            continue
+        free = Decimal(str(b.get("free", "0")))
+        locked = Decimal(str(b.get("locked", "0")))
+        return free, locked
+    return Decimal("0"), Decimal("0")
+
+
+def _q(value: Decimal, pattern: str) -> str:
+    return str(value.quantize(Decimal(pattern)))
+
+
 def _interval_ms(interval: str) -> int | None:
     s = interval.strip()
     if len(s) < 2:
@@ -178,6 +197,16 @@ class Trader:
             except Exception:
                 logger.exception("sync_position_failed", extra={"symbol": symbol})
 
+        if self._rules is not None:
+            try:
+                await self._send_startup_snapshot(
+                    symbol=symbol,
+                    interval=interval,
+                    rules=self._rules,
+                )
+            except Exception:
+                logger.exception("startup_snapshot_failed", extra={"symbol": symbol})
+
         try:
             while True:
                 sleep_s = await self._tick(symbol=symbol, interval=interval)
@@ -270,6 +299,95 @@ class Trader:
 
         await self._execute(order=order, signal=signal, last_price=last_price)
         return self._sleep_until_next_close_s(last_closed_close_ms=last_closed.close_time_ms)
+
+    async def _send_startup_snapshot(
+        self,
+        *,
+        symbol: str,
+        interval: str,
+        rules: SymbolTradingRules,
+    ) -> None:
+        if not self._notifier.enabled():
+            return
+
+        try:
+            account = await self._client.account()
+        except Exception as e:
+            header = (
+                f"{symbol} | {interval} | {self._strategy.strategy_id} | "
+                f"mode={self._settings.trading_mode}"
+            )
+            await self._notifier.send(
+                "\n".join(
+                    [
+                        "启动快照",
+                        header,
+                        f"账户读取失败: {type(e).__name__}: {e}",
+                    ]
+                )
+            )
+            return
+
+        quote_free, quote_locked = _extract_balance(account=account, asset=rules.quote_asset)
+        base_free, base_locked = _extract_balance(account=account, asset=rules.base_asset)
+        quote_total = quote_free + quote_locked
+        base_total = base_free + base_locked
+
+        last_price = await self._last_price(symbol=symbol, interval=interval)
+        equity = quote_total + (base_total * last_price) if last_price > 0 else Decimal("0")
+
+        if self._position_sizing == "cash_fraction":
+            sizing = f"复利 {_q(self._cash_fraction * Decimal('100'), '0.01')}% 现金"
+        else:
+            sizing = f"固定名义 {_q(self._order_notional_usdt, '0.01')} {rules.quote_asset}"
+
+        trail = (
+            "关闭"
+            if not self._trailing_stop_enabled
+            else (
+                f"start={_q(self._trailing_start_profit_pct, '0.01')}% "
+                f"dd={_q(self._trailing_drawdown_pct, '0.01')}%"
+            )
+        )
+
+        header = (
+            f"{symbol} | {interval} | {self._strategy.strategy_id} | "
+            f"mode={self._settings.trading_mode}"
+        )
+        quote_line = (
+            f"余额: {rules.quote_asset} free={_q(quote_free, '0.01')} "
+            f"locked={_q(quote_locked, '0.01')}"
+        )
+        base_line = (
+            f"持仓: {rules.base_asset} free={_q(base_free, '0.00000001')} "
+            f"locked={_q(base_locked, '0.00000001')}"
+        )
+        sizing_line = (
+            f"仓位: {sizing} (cap={_q(self._max_order_notional_usdt, '0.01')} {rules.quote_asset})"
+        )
+        await self._notifier.send(
+            "\n".join(
+                [
+                    "启动快照",
+                    header,
+                    quote_line,
+                    base_line,
+                    f"价格: {symbol} ≈ {_q(last_price, '0.01')} {rules.quote_asset}",
+                    f"权益: ≈ {_q(equity, '0.01')} {rules.quote_asset}",
+                    sizing_line,
+                    f"离场保护: {trail}",
+                ]
+            )
+        )
+
+    async def _last_price(self, *, symbol: str, interval: str) -> Decimal:
+        try:
+            klines = await self._client.klines(symbol=symbol, interval=interval, limit=1)
+        except Exception:
+            return Decimal("0")
+        if not klines:
+            return Decimal("0")
+        return klines[-1].close
 
     def _sleep_until_next_close_s(self, *, last_closed_close_ms: int) -> float:
         cap = _poll_cap_seconds(self._interval)
