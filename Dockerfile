@@ -5,7 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN useradd -m -u 10001 appuser
+RUN useradd -m -u 10001 appuser \
+  && chown -R appuser:appuser /app
 
 COPY pyproject.toml /app/pyproject.toml
 COPY src /app/src
