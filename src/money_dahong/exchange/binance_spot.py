@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hmac
 import time
 from dataclasses import dataclass
@@ -11,6 +12,11 @@ from urllib.parse import urlencode
 import httpx
 
 from money_dahong.types import Side
+
+_DEFAULT_RECV_WINDOW_MS = 5_000
+_DEFAULT_MAX_RETRIES = 3
+_DEFAULT_RETRY_BASE_SECONDS = 0.5
+_DEFAULT_RETRY_MAX_SECONDS = 8.0
 
 
 class BinanceApiError(RuntimeError):
@@ -34,6 +40,10 @@ def build_query_string(params: dict[str, Any]) -> str:
             continue
         items.append((key, _normalize_value(value)))
     return urlencode(items)
+
+
+def _compact_params(params: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in params.items() if v is not None}
 
 
 def sign_query_string(query_string: str, api_secret: str) -> str:
@@ -60,14 +70,25 @@ class BinanceSpotClient:
         api_secret: str,
         base_url: str = "https://api.binance.com",
         timeout_seconds: float = 10.0,
+        recv_window_ms: int = _DEFAULT_RECV_WINDOW_MS,
+        max_retries: int = _DEFAULT_MAX_RETRIES,
+        retry_base_seconds: float = _DEFAULT_RETRY_BASE_SECONDS,
+        retry_max_seconds: float = _DEFAULT_RETRY_MAX_SECONDS,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._api_key = api_key
         self._api_secret = api_secret
         self._base_url = base_url.rstrip("/")
+        self._recv_window_ms = int(max(1, recv_window_ms))
+        self._max_retries = int(max(0, max_retries))
+        self._retry_base_seconds = float(max(0.0, retry_base_seconds))
+        self._retry_max_seconds = float(max(self._retry_base_seconds, retry_max_seconds))
+        self._time_offset_ms = 0
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
             timeout=httpx.Timeout(timeout_seconds),
             headers={"X-MBX-APIKEY": api_key} if api_key else {},
+            transport=transport,
         )
 
     async def aclose(self) -> None:
@@ -89,12 +110,26 @@ class BinanceSpotClient:
         )
         return cast(dict[str, Any], data)
 
-    async def klines(self, *, symbol: str, interval: str, limit: int = 200) -> list[Kline]:
+    async def klines(
+        self,
+        *,
+        symbol: str,
+        interval: str,
+        limit: int = 200,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+    ) -> list[Kline]:
         raw = await self._request(
             "GET",
             "/api/v3/klines",
             signed=False,
-            params={"symbol": symbol, "interval": interval, "limit": limit},
+            params={
+                "symbol": symbol,
+                "interval": interval,
+                "limit": limit,
+                "startTime": start_time_ms,
+                "endTime": end_time_ms,
+            },
         )
         klines: list[Kline] = []
         for row in raw:
@@ -145,21 +180,99 @@ class BinanceSpotClient:
         signed: bool,
         params: dict[str, Any],
     ) -> Any:
-        request_params = dict(params)
-        if signed:
-            if not self._api_secret:
-                raise RuntimeError("BINANCE_API_SECRET is required for signed endpoints")
-            request_params.setdefault("timestamp", int(time.time() * 1000))
-            query_string = build_query_string(request_params)
-            signature = sign_query_string(query_string, self._api_secret)
-            request_params["signature"] = signature
+        attempt = 0
+        while True:
+            request_params = _compact_params(dict(params))
+            if signed:
+                if not self._api_secret:
+                    raise RuntimeError("BINANCE_API_SECRET is required for signed endpoints")
+                request_params.setdefault("recvWindow", self._recv_window_ms)
+                request_params.setdefault(
+                    "timestamp",
+                    int(time.time() * 1000) + self._time_offset_ms,
+                )
+                query_string = build_query_string(request_params)
+                signature = sign_query_string(query_string, self._api_secret)
+                request_params["signature"] = signature
 
-        response = await self._client.request(method, path, params=request_params)
-        if response.status_code >= 400:
-            payload: Any
             try:
-                payload = response.json()
-            except Exception:
-                payload = response.text
-            raise BinanceApiError(status_code=response.status_code, payload=payload)
-        return response.json()
+                response = await self._client.request(method, path, params=request_params)
+            except (httpx.TimeoutException, httpx.TransportError):
+                if attempt >= self._max_retries:
+                    raise
+                await asyncio.sleep(self._retry_delay_seconds(attempt=attempt, response=None))
+                attempt += 1
+                continue
+
+            if response.status_code >= 400:
+                payload: Any
+                try:
+                    payload = response.json()
+                except Exception:
+                    payload = response.text
+
+                if (
+                    signed
+                    and _is_timestamp_error(payload)
+                    and attempt < self._max_retries
+                    and await self._sync_time_offset_ms()
+                ):
+                    attempt += 1
+                    continue
+
+                if (
+                    _should_retry_http_error(status_code=response.status_code)
+                    and attempt < self._max_retries
+                ):
+                    await asyncio.sleep(
+                        self._retry_delay_seconds(attempt=attempt, response=response)
+                    )
+                    attempt += 1
+                    continue
+
+                raise BinanceApiError(status_code=response.status_code, payload=payload)
+
+            return response.json()
+
+    async def _sync_time_offset_ms(self) -> bool:
+        try:
+            response = await self._client.request("GET", "/api/v3/time", params={})
+            if response.status_code >= 400:
+                return False
+            data = response.json()
+            server_ms = int(data["serverTime"])
+        except Exception:
+            return False
+        self._time_offset_ms = server_ms - int(time.time() * 1000)
+        return True
+
+    def _retry_delay_seconds(
+        self,
+        *,
+        attempt: int,
+        response: httpx.Response | None,
+    ) -> float:
+        if response is not None:
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    value = float(retry_after)
+                    if value > 0:
+                        return value
+                except ValueError:
+                    pass
+        delay = self._retry_base_seconds * (2**attempt)
+        return float(min(delay, self._retry_max_seconds))
+
+
+def _is_timestamp_error(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    try:
+        return int(payload.get("code", 0)) == -1021
+    except (TypeError, ValueError):
+        return False
+
+
+def _should_retry_http_error(*, status_code: int) -> bool:
+    return status_code in (418, 429) or status_code >= 500

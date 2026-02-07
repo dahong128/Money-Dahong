@@ -16,6 +16,9 @@ from money_dahong.types import OrderRequest, Signal
 
 logger = logging.getLogger("money_dahong.trader")
 
+_TICK_ERROR_BACKOFF_SECONDS = 5.0
+_ERROR_NOTIFY_COOLDOWN_SECONDS = 300.0
+
 
 @dataclass
 class TraderState:
@@ -170,6 +173,7 @@ class Trader:
         self._rules: SymbolTradingRules | None = None
         self._symbol = ""
         self._interval = ""
+        self._last_error_notify_time_s = 0.0
 
     async def run(self, *, symbol: str | None = None, interval: str | None = None) -> None:
         symbol = symbol if symbol is not None else self._settings.symbol
@@ -209,7 +213,16 @@ class Trader:
 
         try:
             while True:
-                sleep_s = await self._tick(symbol=symbol, interval=interval)
+                try:
+                    sleep_s = await self._tick(symbol=symbol, interval=interval)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    sleep_s = await self._handle_tick_exception(
+                        symbol=symbol,
+                        interval=interval,
+                        error=e,
+                    )
                 await asyncio.sleep(sleep_s)
         except asyncio.CancelledError:
             raise
@@ -469,12 +482,15 @@ class Trader:
                 if order.quantity is not None
                 else f"quote≈{order.quote_order_qty} {quote_asset}"
             )
-            await self._notifier.send(
-                f"[DRY_RUN] {symbol} {signal.side} {qty_hint} "
-                f"price≈{last_price} reason={signal.reason}"
-            )
             self._apply_fill_locally(order=order, last_price=last_price)
             self._state.last_trade_time_s = time.time()
+            await self._safe_notify(
+                message=(
+                    f"[DRY_RUN] {symbol} {signal.side} {qty_hint} "
+                    f"price≈{last_price} reason={signal.reason}"
+                ),
+                symbol=symbol,
+            )
             return
 
         resp = await self._client.new_order_market(
@@ -498,11 +514,51 @@ class Trader:
             if order.quantity is not None
             else f"quote={order.quote_order_qty} {quote_asset}"
         )
-        await self._notifier.send(
-            f"[LIVE] {symbol} {order.side} {qty_hint} order_id={order_id} reason={signal.reason}"
-        )
         self._apply_fill_locally(order=order, last_price=last_price, resp=resp)
         self._state.last_trade_time_s = time.time()
+        await self._safe_notify(
+            message=(
+                f"[LIVE] {symbol} {order.side} {qty_hint} "
+                f"order_id={order_id} reason={signal.reason}"
+            ),
+            symbol=symbol,
+        )
+
+    async def _safe_notify(self, *, message: str, symbol: str) -> None:
+        try:
+            await self._notifier.send(message)
+        except Exception:
+            logger.exception(
+                "notify_failed",
+                extra={"symbol": symbol, "strategy_id": self._strategy.strategy_id},
+            )
+
+    async def _handle_tick_exception(
+        self,
+        *,
+        symbol: str,
+        interval: str,
+        error: Exception,
+    ) -> float:
+        logger.exception(
+            "tick_failed",
+            extra={
+                "symbol": symbol,
+                "interval": interval,
+                "strategy_id": self._strategy.strategy_id,
+            },
+        )
+        now_s = time.time()
+        if now_s - self._last_error_notify_time_s >= _ERROR_NOTIFY_COOLDOWN_SECONDS:
+            self._last_error_notify_time_s = now_s
+            await self._safe_notify(
+                message=(
+                    f"[ERROR] {symbol} {interval} {self._strategy.strategy_id} "
+                    f"tick_failed={type(error).__name__}: {error}"
+                ),
+                symbol=symbol,
+            )
+        return _TICK_ERROR_BACKOFF_SECONDS
 
     def _apply_fill_locally(
         self,

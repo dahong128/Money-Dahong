@@ -51,6 +51,7 @@ class Backtester:
         cash_fraction: Decimal,
         order_notional_usdt: Decimal,
         fee_rate: Decimal,
+        slippage_bps: Decimal,
         lookback_bars: int,
         trailing_stop_enabled: bool,
         trailing_start_profit_pct: Decimal,
@@ -64,10 +65,15 @@ class Backtester:
         self._cash_fraction = cash_fraction
         self._order_notional = order_notional_usdt
         self._fee_rate = fee_rate
+        self._slippage_bps = slippage_bps
         self._lookback_bars = lookback_bars
         self._trailing_stop_enabled = trailing_stop_enabled
         self._trailing_start_profit_pct = trailing_start_profit_pct
         self._trailing_drawdown_pct = trailing_drawdown_pct
+        if self._slippage_bps < 0:
+            raise ValueError("slippage_bps must be >= 0")
+        if self._slippage_bps >= Decimal("10000"):
+            raise ValueError("slippage_bps must be < 10000")
 
         self._cash = initial_cash_usdt
         self._qty = Decimal("0")
@@ -175,16 +181,20 @@ class Backtester:
             if total <= 0 or self._cash < total:
                 return
 
-            qty = cost / price
+            entry_price = self._fill_price(price=price, side="BUY")
+            if entry_price <= 0:
+                return
+
+            qty = cost / entry_price
             self._cash -= total
             self._qty += qty
             self._in_position = True
 
             self._entry_time_ms = time_ms
-            self._entry_price = price
+            self._entry_price = entry_price
             self._entry_qty = qty
             self._entry_total_usdt = total
-            self._peak_price = price
+            self._peak_price = entry_price
             return
 
         if signal.side == "SELL":
@@ -222,7 +232,11 @@ class Backtester:
         if not self._in_position or self._qty <= 0 or price <= 0:
             return
 
-        proceeds = self._qty * price
+        exit_price = self._fill_price(price=price, side="SELL")
+        if exit_price <= 0:
+            return
+
+        proceeds = self._qty * exit_price
         fee = proceeds * self._fee_rate
         exit_total = proceeds - fee
         self._cash += exit_total
@@ -240,7 +254,7 @@ class Backtester:
                 side="LONG",
                 exit_reason=reason,
                 entry_price=self._entry_price,
-                exit_price=price,
+                exit_price=exit_price,
                 quantity=self._entry_qty,
                 pnl_usdt=pnl,
                 max_runup_pct=max_runup_pct,
@@ -254,3 +268,11 @@ class Backtester:
         self._entry_qty = Decimal("0")
         self._entry_total_usdt = Decimal("0")
         self._peak_price = Decimal("0")
+
+    def _fill_price(self, *, price: Decimal, side: str) -> Decimal:
+        if price <= 0 or self._slippage_bps <= 0:
+            return price
+        ratio = self._slippage_bps / Decimal("10000")
+        if side == "BUY":
+            return price * (Decimal("1") + ratio)
+        return price * (Decimal("1") - ratio)

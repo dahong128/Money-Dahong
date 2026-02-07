@@ -29,6 +29,7 @@ def test_trailing_stop_exits_before_cross_down() -> None:
         cash_fraction=Decimal("0.8"),
         order_notional_usdt=Decimal("100"),
         fee_rate=Decimal("0"),
+        slippage_bps=Decimal("0"),
         lookback_bars=strategy.lookback_bars,
         trailing_stop_enabled=True,
         trailing_start_profit_pct=Decimal("30"),
@@ -52,4 +53,3 @@ def test_trailing_stop_exits_before_cross_down() -> None:
     bt.run(klines=klines)
     assert bt.trades
     assert bt.trades[-1].exit_reason == "trailing_stop"
-

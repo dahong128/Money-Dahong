@@ -10,7 +10,10 @@ from pydantic import BaseModel, Field
 class MarketConfig(BaseModel):
     symbol: Optional[str] = None
     interval: Optional[str] = None
-    limit: int = Field(default=1000, ge=1, le=1000)
+    # Max bars to use in backtest (client paginates when needed).
+    limit: int = Field(default=1000, ge=1, le=20000)
+    start_utc: Optional[str] = None
+    end_utc: Optional[str] = None
 
 
 class StrategyConfig(BaseModel):
@@ -25,6 +28,8 @@ class BacktestConfig(BaseModel):
     cash_fraction: float = Field(default=0.8, gt=0, le=1)
     order_notional_usdt: float = Field(default=25.0, gt=0)
     fee_rate: float = Field(default=0.001, ge=0)
+    slippage_bps: float = Field(default=0.0, ge=0, lt=10000)
+    trades_csv: Optional[str] = None
 
 
 class TelegramConfig(BaseModel):

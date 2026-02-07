@@ -21,11 +21,17 @@ symbol = "ETHUSDT"
 # - 可用值参考 Binance Kline interval：`1m` `5m` `15m` `1h` `4h` `1d` 等
 # - 周期越小交易越频繁，手续费影响越大；周期越大信号更慢但更稳。
 # 如果你希望跟随 `.env` 里的 `INTERVAL`，可以把这一行删掉或留空。
-interval = "1d"
+interval = "15m"
 
-# 拉取最近多少根 K 线（最大 1000）。
-# - 1000 根 1h 大约是 ~41 天；1000 根 1d 大约是 ~1000 天。
+# 回测最多使用多少根 K 线（最大 20000）。
+# - 程序会自动分页拉取（单次请求上限 1000）。
 limit = 1000
+
+# 可选：回测起止时间（UTC，ISO-8601）。
+# - 例如：2024-01-01T00:00:00Z
+# - 留空表示不限制该边界。
+start_utc = ""
+end_utc = ""
 
 [strategy]
 # 均线类型：
@@ -35,11 +41,11 @@ ma_type = "ema" # "sma" | "ema"
 
 # 快均线周期（必须 < slow_period）。
 # - 一般可从 5~30 开始尝试（取决于 interval）。
-fast_period = 12
+fast_period = 15
 
 # 慢均线周期（必须 > fast_period）。
 # - 一般可从 30~200 开始尝试（取决于 interval）。
-slow_period = 30
+slow_period = 100
 
 [backtest]
 # 回测初始资金（USDT）。
@@ -48,7 +54,7 @@ initial_cash_usdt = 100
 # 仓位模式（复利/固定两种）：
 # - `cash_fraction`：按当前现金余额的比例投入（复利模式，推荐）
 # - `fixed_notional`：每次固定投入一个 USDT 金额
-position_sizing = "cash_fraction" # "cash_fraction" | "fixed_notional"
+position_sizing = "fixed_notional" # "cash_fraction" | "fixed_notional"
 
 # 复利模式：每次开仓投入“当前现金余额”的比例（0~1）。
 # - 例如 0.8 表示每次用现金余额的 80% 参与开仓，剩余 20% 作为缓冲。
@@ -56,17 +62,27 @@ cash_fraction = 0.6
 
 # 固定模式：每次开仓投入的固定名义金额（USDT）。
 # - 仅当 position_sizing = "fixed_notional" 时生效。
-order_notional_usdt = 60
+order_notional_usdt = 20
 
 # 手续费率（比例）。
 # - 0.001 = 0.1%（现货常见）
 # - 回测里 BUY/SELL 都会计入手续费。
 fee_rate = 0.001
 
+# 滑点（bps）。
+# - 1 bps = 0.01%
+# - 回测中 BUY 会按更差价格成交（close * (1 + bps/10000)）
+# - 回测中 SELL 会按更差价格成交（close * (1 - bps/10000)）
+slippage_bps = 5
+
+# 交易明细导出 CSV 路径（可选，留空表示不导出）。
+# - 你也可以在命令行使用 `--trades-csv` 覆盖这里。
+trades_csv = "build/backtest_trades.csv"
+
 [risk]
 # 是否启用“离场保护”（移动止损 / Trailing Stop）。
 # 作用：当价格从高点回撤一定幅度时提前止盈/止损，减少死叉离场造成的盈利回吐。
-trailing_stop_enabled = true
+trailing_stop_enabled = false
 
 # 只有当“单笔浮盈最高值”达到该阈值后，才会开始启用移动止损（单位：百分比）。
 # - 例如 30 表示单笔浮盈最高 >= 30% 后，才启动 trailing stop。

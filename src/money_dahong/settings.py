@@ -26,15 +26,6 @@ class Settings(BaseSettings):
     max_order_notional_usdt: float = Field(default=25.0, validation_alias="MAX_ORDER_NOTIONAL_USDT")
     cooldown_seconds: int = Field(default=60, validation_alias="COOLDOWN_SECONDS")
 
-    # Strategy (EMA Cross)
-    ema_fast_period: int = Field(default=12, validation_alias="EMA_FAST_PERIOD")
-    ema_slow_period: int = Field(default=26, validation_alias="EMA_SLOW_PERIOD")
-
-    # Strategy (MA Cross)
-    ma_type: Literal["sma", "ema"] = Field(default="sma", validation_alias="MA_TYPE")
-    ma_fast_period: int = Field(default=20, validation_alias="MA_FAST_PERIOD")
-    ma_slow_period: int = Field(default=60, validation_alias="MA_SLOW_PERIOD")
-
     # Telegram
     telegram_bot_token: str = Field(default="", validation_alias="TELEGRAM_BOT_TOKEN")
     telegram_chat_id: str = Field(default="", validation_alias="TELEGRAM_CHAT_ID")

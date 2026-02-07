@@ -1,0 +1,15 @@
+# EMA Cross 运行配置（用于 `money-dahong run`）
+
+[market]
+# 交易对（留空时回退到 `.env` 的 `SYMBOL`）
+symbol = "ETHUSDT"
+
+# K 线周期（留空时回退到 `.env` 的 `INTERVAL`）
+interval = "1m"
+
+[strategy]
+# 快均线（必须 < slow_period）
+fast_period = 12
+
+# 慢均线（必须 > fast_period）
+slow_period = 26

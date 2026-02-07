@@ -1,176 +1,164 @@
-# 币安量化交易工具：需求文档与开发计划（草案）
+# Money-Dahong（币安现货量化 CLI 工具）
 
-> 已确认范围（2026-02-01）：**现货** / **Binance.com** / **CLI** / **单交易对单策略** / **工程化优先** / 交易对 **ETHUSDT** / 告警 **Telegram**。
+一个以工程稳定性为优先的 Binance 现货量化程序，当前聚焦在：
 
----
+- 单进程 bot、单交易对、单策略实例
+- CLI 驱动（无 Web 面板）
+- 策略：`EMA Cross`、`MA Cross`
+- 模式：`dry_run`（演练）与 `live`（实盘）
+- 告警：Telegram
+- 能力：实盘运行、单次回测、参数网格回测、Docker 部署
 
-## 1. 需求文档（PRD）
+英文版见 `README.md`。
 
-### 1.0 范围确认（你已回答）
-- 交易类型：现货
-- 交易所：Binance.com
-- 交互方式：CLI（暂无 Web 面板）
-- 运行形态：单交易对 + 单策略（先跑通一个 bot 实例）
-- 目标倾向：工程化（稳定性、可观测、可维护优先）
-- 交易对：ETHUSDT
-- 告警通道：Telegram
+## 1. 环境要求
 
-### 1.1 背景与目标
-- 背景：将交易策略从研究到实盘自动化，降低手动操作成本，提高可观测性与可控风险。
-- 目标（MVP）：
-  - 稳定接入币安（API Key）获取行情/账户信息。
-  - 支持至少 1 个策略实盘运行（如 EMA 交叉）。
-  - 具备基础风控（仓位、止损、最大回撤/最大亏损、下单保护）。
-  - 有监控与告警（订单/异常/资金变化）。
-  - 可回测同一策略（同一套信号逻辑）。
+- Python `>=3.12`
+- （可选）Docker + Docker Compose
+- Binance API Key/Secret（实盘或私有接口需要）
+- Telegram Bot Token/Chat ID（可选）
 
-### 1.2 用户与使用场景
-- 用户：单用户（你），未来可扩展到多账户/多策略。
-- 场景：
-  - 配置交易对与策略参数 → 一键启动机器人。
-  - 随时暂停/恢复、手动平仓。
-  - 查看当前持仓、订单、PnL、策略状态、日志。
-  - 回测并导出结果，对比不同参数。
+## 2. 快速开始（本地 Python）
 
-### 1.3 功能需求（按模块）
+```bash
+cp .env.example .env
+# 修改 .env、configs/ema_cross.toml、configs/ma_cross.toml
 
-#### A. 账户与权限
-- 配置/加密存储 API Key/Secret（支持只读模式与交易模式）。
-- 校验权限、连通性测试、限频提示。
+python3.14 -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
 
-#### B. 行情与数据
-- 获取 K 线（指定周期）、最新价、深度（可选）。
-- 实盘：WebSocket 优先，REST 兜底重连。
-- 本地缓存与持久化（用于回测/复盘）。
+money-dahong health
+```
 
-#### C. 策略系统
-- 策略接口规范：`on_bar/on_tick`、`generate_signal`、`position_sizing`。
-- 参数化：交易对、周期、指标参数、交易时间窗（可选）。
-- 策略生命周期：启动/停止/热更新参数（可选）。
+启动 MA 策略（默认读取 `configs/ma_cross.toml`）：
 
-#### D. 交易执行（Execution）
-- 下单类型：市价/限价（MVP 先市价 + 限价二选一即可）。
-- 订单状态跟踪：提交 → 成交 → 撤单 → 失败。
-- 幂等与去重：避免重复下单（如网络抖动/重启）。
-- 滑点与手续费处理（用于回测与实盘统计）。
+```bash
+money-dahong run-ma
+```
 
-#### E. 风控（Risk）
-- 单笔风险：最大仓位、最大下单金额、最小下单量校验。
-- 全局风险：最大日亏损/最大回撤触发熔断（暂停交易）。
-- 止损/止盈：固定比例或 ATR（可选）。
-- 交易保护：价格偏离阈值、短时间频繁交易限制、冷却时间。
+启动 EMA 策略（读取 `configs/ema_cross.toml`）：
 
-#### F. 回测（Backtest）
-- 数据源：本地 K 线（先做 bar 级别回测）。
-- 成本模型：手续费、滑点。
-- 输出：净值曲线、胜率、最大回撤、Sharpe（可选）、交易明细导出 CSV。
+```bash
+money-dahong run
+```
 
-#### G. 监控与运维
-- 日志：结构化日志（策略、订单、风控、异常）。
-- 指标：运行状态、延迟、下单成功率、PnL。
-- 告警：邮件/Telegram/企业微信（先选一种）。
+## 3. 快速开始（Docker）
 
-#### H. 管理界面（可选两种）
-- 当前选择：仅 CLI。
-- 能力：启动/停止机器人、查看持仓订单、策略参数管理、导出日志/交易明细。
+```bash
+cp .env.example .env
+# 修改 .env、configs/ema_cross.toml、configs/ma_cross.toml
 
-### 1.4 非功能需求
-- 安全：Key 不落盘明文；支持 `.env` 但加密更好；最小权限。
-- 稳定：断线重连、任务自恢复、异常隔离（策略崩不拖垮执行器）。
-- 可观测：关键链路可追踪（信号 → 风控 → 下单 → 成交）。
-- 性能：MVP 不追求极致低延迟，但要避免阻塞与漏单。
-- 可扩展：新增策略/交易所尽量不改核心模块。
+docker compose build
 
-### 1.5 约束与合规提示（需要确认）
-- 已确认：`Binance.com` + 现货。
-- 仍需确认：部署位置（本地 Mac / VPS / Docker？）。
-- 风险提示：量化实盘有亏损风险，尤其杠杆合约；建议先模拟盘或小额白名单交易对。
+docker compose --profile cli run --rm cli health
+docker compose --profile cli run --rm cli backtest
+docker compose --profile cli run --rm cli backtest-grid --fast-values 8,10,12 --slow-values 30,40,60 --top 5 --results-csv build/grid_top5.csv
 
-### 1.6 验收标准（MVP）
-- 能在指定交易对（如 BTCUSDT）上稳定跑满 24 小时不断线（允许自动重连）。
-- 订单状态一致（本地状态与交易所一致），不重复下单。
-- 风控能在触发条件下阻止下单并告警。
-- 回测与实盘同一策略信号逻辑复用（同一份策略代码）。
+docker compose up -d bot
+docker compose logs -f bot
+docker compose down
+```
 
----
+如果你环境里是旧命令，也可用 `docker-compose`。
 
-## 2. 开发计划（里程碑）
+## 4. 命令总览
 
-### 2.0 工程化基线（贯穿全程）
-- 代码质量：格式化、lint、类型检查（可选）、单元测试最小集、预提交钩子（可选）。
-- 可观测：结构化日志（JSON 或 key-value）、关键事件统一字段（`strategy_id`、`symbol`、`order_id`、`trace_id` 等）。
-- 可运维：配置与 secrets 分离、可重复部署、明确的运行命令与故障排查步骤。
-- 可靠性：重试/超时/限频、断线重连、幂等、可恢复启动（从交易所拉状态）。
+```bash
+money-dahong --help
+```
 
-### Milestone 0：技术选型与脚手架（0.5–1 天）
-- 语言/框架：`Python 3.12+`，`asyncio`；CLI 用 `typer` 或 `argparse`（二选一）。
-- 目录结构、配置体系（`.env` + 明确的 config schema）、日志规范、CI（lint + test）。
-- 基础约定：统一时区/时间戳、Decimal 精度策略、错误码/异常体系。
+核心命令：
 
-### Milestone 1：交易所适配层（2–4 天）
-- REST：账户、余额、下单、撤单、查询订单、K 线。
-- WebSocket：行情订阅 + 自动重连。
-- 限频与重试策略（指数退避 + 业务可重试白名单）。
+- `config-init`：初始化 `.env`
+- `show-config`：查看生效配置（敏感字段脱敏）
+- `health`：连通 Binance 并查看 server time
+- `alerts-test`：发送 Telegram 测试消息
+- `run`：运行 EMA 策略 bot（读取 `configs/ema_cross.toml`）
+- `run-ma`：运行 MA 策略 bot（TOML 配置）
+- `backtest`：单组参数回测
+- `backtest-grid`：多组 MA 参数网格回测
 
-### Milestone 2：执行引擎与状态机（3–5 天）
-- 订单状态机、幂等 key、重启恢复（从交易所拉取未完成订单）。
-- Position/PnL 计算（先简单：现货持仓 + 已实现/未实现）。
-- 交易保护：下单前校验（最小下单量、步进、最小名义价值）、价格偏离保护。
+## 5. 回测说明
 
-### Milestone 3：策略框架 + 示例策略（2–4 天）
-- 策略基类、参数、信号规范。
-- 内置 1–2 个策略（EMA Cross / 均值回归二选一）。
+### 5.1 单组回测示例
 
-### Milestone 4：风控模块（2–4 天）
-- 仓位/金额/频率限制、熔断、止损止盈（先最小集）。
-- 风控事件与告警接口。
+```bash
+money-dahong backtest \
+  --start 2024-01-01T00:00:00Z \
+  --end 2024-12-31T23:59:59Z \
+  --limit 5000 \
+  --slippage-bps 5 \
+  --trades-csv build/backtest_trades.csv
+```
 
-### Milestone 5：回测引擎（3–6 天）
-- bar 级回测、成本模型、报表输出（CSV + 简单图表可选）。
-- 策略复用：同策略代码可跑回测/实盘。
+### 5.2 参数网格回测示例
 
-### Milestone 6：监控与管理面板（2–5 天）
-- CLI：启动/停止/状态/导出日志。
-- 暂不做 Web：后续如需要，可新增状态页、策略参数页、订单与持仓页。
+```bash
+money-dahong backtest-grid \
+  --fast-values 8,10,12,15 \
+  --slow-values 30,40,60 \
+  --start 2024-01-01T00:00:00Z \
+  --end 2024-12-31T23:59:59Z \
+  --top 10 \
+  --results-csv build/grid_top10.csv
+```
 
-### Milestone 7：上线与运行手册（1–2 天）
-- Docker 化（可选）、配置说明、故障排查清单。
-- “小额模式”与逐步放量策略（防止一上来全仓）。
+### 5.3 关键规则
 
----
+- `limit` 上限：`20000` 根 K 线。
+- 指定 `--start` 后会自动分页拉取（每次最多 `1000`）。
+- `slippage_bps`：`1 bps = 0.01%`。
+- 回测会忽略最后一根可能未收盘的 K 线。
 
-## 3. 下一步需要补齐的信息（便于直接开工）
-1) 策略选择：`EMA Cross` / `MA Cross（双均线）` 先跑哪一个作为 MVP？
-2) 下单偏好：市价 / 限价（MVP 建议先市价，配合价格偏离保护）
-3) 部署方式：本地 Mac / VPS / Docker（建议 VPS 或 Docker，便于 7x24）
-4) 资金与风险参数：初始资金、单笔最大下单金额、最大仓位、最大日亏损/最大回撤
-5) 运行频率：K 线周期（例如 `1m/5m/15m`）与是否需要 WebSocket（先 REST 轮询也可）
+## 6. 配置说明
 
----
+### 6.1 `.env`（运行态与密钥）
 
-## 4. 使用 Docker（推荐 7x24 部署）
-> 注意：需要本机有“正在运行的 Docker Engine”。在 macOS 上，`brew install docker` 只会安装 Docker CLI，
-> 还需要安装并启动 Docker Desktop（GUI）或 Colima（轻量 VM）才能真正运行容器。
+重点字段：
 
-1) 配置：
-   - `cp .env.example .env` 并填写 `BINANCE_API_KEY/BINANCE_API_SECRET`、`TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID`
-   - 演练/实盘开关（`.env`）：
-     - 演练（不下单）：`TRADING_MODE=dry_run`
-     - 实盘（会下单）：`TRADING_MODE=live` 且 `CONFIRM_LIVE_TRADING=YES`
-   - 安全帽（`.env`）：`MAX_ORDER_NOTIONAL_USDT`（每次 BUY 名义金额硬上限；会截断 `ma_cross.toml` 的仓位投入）
-2) 双均线参数配置（回测/实盘共用）：
-   - 编辑 `configs/ma_cross.toml`（交易对、周期、均线、复利仓位、Trailing Stop 都在这里）
-3) 构建镜像：
-   - `docker compose build`（或 `docker-compose build`）
-4) 连通性检查（一次性运行）：
-   - `docker compose --profile cli run --rm cli health`（或 `docker-compose --profile cli run --rm cli health`）
-   - `docker compose --profile cli run --rm cli alerts-test --message 'hello'`（或 `docker-compose ...`）
-   - 回测（读取 `configs/ma_cross.toml`，默认推送 Telegram）：`docker compose --profile cli run --rm cli backtest`
-5) 启动机器人（后台常驻，默认跑双均线实盘/演练）：
-   - `docker compose up -d bot`（或 `docker-compose up -d bot`）
-   - 如需切换到 EMA 策略：把 `docker-compose.yml` 的 `bot.command` 改成 `["run"]` 然后 `docker compose up -d --force-recreate bot`
-6) 查看日志：
-   - `docker compose logs -f bot`（或 `docker-compose logs -f bot`）
-   - 提示：如果你用的是 `interval=1d`，程序会按周期自动降低轮询频率（不会每 3 秒刷一次 Binance 请求日志）。
-7) 停止：
-   - `docker compose down`（或 `docker-compose down`）
+- Binance：`BINANCE_API_KEY`、`BINANCE_API_SECRET`
+- 运行态：`SYMBOL`、`INTERVAL`、`TRADING_MODE`、`CONFIRM_LIVE_TRADING`
+- 风控：`MAX_ORDER_NOTIONAL_USDT`、`COOLDOWN_SECONDS`
+- 告警：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`
+- 日志：`LOG_LEVEL`
+
+实盘开关必须同时满足：
+
+- `TRADING_MODE=live`
+- `CONFIRM_LIVE_TRADING=YES`
+
+### 6.2 `configs/ema_cross.toml`（EMA 实盘参数）
+
+- `[market]`：`symbol`、`interval`
+- `[strategy]`：`fast_period`、`slow_period`
+
+### 6.3 `configs/ma_cross.toml`（MA 策略/回测参数）
+
+- `[market]`：`symbol`、`interval`、`limit`、`start_utc`、`end_utc`
+- `[strategy]`：`ma_type`、`fast_period`、`slow_period`
+- `[backtest]`：仓位模式、手续费、滑点、交易明细 CSV
+- `[risk]`：Trailing Stop 参数
+- `[telegram]`：回测摘要推送开关
+
+## 7. 当前可靠性能力
+
+已实现：
+
+- Binance 请求重试与退避（超时/传输错误/`429`/`5xx`）
+- signed 请求 `recvWindow` + 时间漂移自动校时
+- 交易主循环异常恢复（tick 失败后退避并按冷却告警）
+- 通知通道失败不影响订单状态更新
+
+## 8. 开发与自检
+
+```bash
+ruff check .
+mypy src
+pytest -q
+```
+
+## 9. 风险提示
+
+该程序在满足实盘开关条件时会真实下单。
+建议先 `dry_run`，再小额实盘，持续观察日志与告警后再放量。
